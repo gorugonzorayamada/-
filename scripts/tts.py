@@ -98,6 +98,9 @@ def trim_norm(x, sr):
 
 
 def main():
+    # Windows でも日本語の JSON を正しく読み書きする
+    sys.stdin.reconfigure(encoding='utf-8')
+    sys.stdout.reconfigure(encoding='utf-8')
     lines = json.load(sys.stdin)
     use_vv = vv_alive()
     outdir = tempfile.mkdtemp(prefix="tts-")

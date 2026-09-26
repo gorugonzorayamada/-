@@ -8,8 +8,12 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { mix, SR } from './sfx.mjs';
+import { fileURLToPath } from 'node:url';
 
-const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
+// Windows では python3 ではなく python のことが多い
+const PY = process.env.PYTHON || (process.platform === 'win32' ? 'python' : 'python3');
+
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
 const outIdx = args.indexOf('--out');
 const OUT = path.resolve(ROOT, outIdx >= 0 ? args.splice(outIdx, 2)[1] : 'out');
@@ -20,7 +24,7 @@ fs.mkdirSync(OUT, { recursive: true });
 function findFfmpeg() {
   if (process.env.FFMPEG) return process.env.FFMPEG;
   try { execSync('ffmpeg -version', { stdio: 'ignore' }); return 'ffmpeg'; } catch {}
-  try { return execSync('python3 -c "import imageio_ffmpeg;print(imageio_ffmpeg.get_ffmpeg_exe())"').toString().trim(); } catch {}
+  try { return execSync(`${PY} -c "import imageio_ffmpeg;print(imageio_ffmpeg.get_ffmpeg_exe())"`).toString().trim(); } catch {}
   throw new Error('ffmpeg が見つかりません。ffmpeg をインストールするか `pip install imageio-ffmpeg` してください');
 }
 
@@ -49,7 +53,7 @@ function speak(narration, name) {
     vv: l.vv, vvSpeed: l.vvSpeed, vvPitch: l.vvPitch, vvIntonation: l.vvIntonation,
     maxDur: narration[i + 1] ? narration[i + 1].t - l.t - 0.15 : undefined,
   }));
-  const res = JSON.parse(execFileSync('python3', [path.join(ROOT, 'scripts/tts.py')], { input: JSON.stringify(input), maxBuffer: 1 << 26 }).toString());
+  const res = JSON.parse(execFileSync(PY, [path.join(ROOT, 'scripts', 'tts.py')], { input: JSON.stringify(input), maxBuffer: 1 << 26, env: { ...process.env, PYTHONIOENCODING: 'utf-8' } }).toString());
   console.log(`\n[${name}] ナレーションの読み（${res[0]?.engine}。読み間違いがないか確認）`);
   res.forEach((r, i) => {
     const l = narration[i], end = l.t + r.dur, next = narration[i + 1];
