@@ -9,19 +9,22 @@
 | 1 | 返信 | チャット画面 |
 | 2 | 一日先の影 | シルエット劇 |
 | 3 | 時間買い取ります | 文字と数字 |
-| 4 | 角のない国 | 図形キャラ（絵本風） |
-| 5 | 最適化 | アプリ画面と図形 |
-| 6 | 第三惑星調査報告 | 報告書とシルエット |
+| 4 | 第三惑星調査報告 | 報告書とシルエット |
+| 5 | 三分後の自分（前編） | チャット画面・ホラー |
+| 6 | 三分後の自分（後編） | チャット画面・ホラー |
+| 7 | 身代わり | オフィスと家の二画面 |
 
 ```sh
 pip install pyopenjtalk-plus imageio-ffmpeg   # ナレーションと書き出し
+bash scripts/setup-voicevox.sh                 # VOICEVOX を入れて起動（あれば自動で使われる）
 node scripts/render.mjs stories/01-reply --out AIショートショート
 node scripts/render.mjs stories/01-reply --yomi   # ナレーションの読みだけ確認
 ```
 
-- `lib/series.js` … シリーズ共通の字幕、ロゴ、エンドカード、話者ごとの声の設定。
-- `scripts/tts.py` … Open JTalk によるナレーション合成。読みをカナで出力するので、読み間違いは台本側の読み（yomi）で直す。
-- `scripts/sfx.mjs` … BGM（自動作曲）と効果音の合成、ナレーション中の BGM の音量下げ。
+- `lib/series.js` … シリーズ共通の字幕、ロゴ、エンドカード、話者ごとの声（VOICEVOX の話者名）の設定。
+- `lib/chat.js` / `lib/threemin.js` … チャット画面と「三分後の自分」の演出部品。
+- `scripts/tts.py` … ナレーション合成（VOICEVOX、なければ Open JTalk）。読みをカナで出力するので、読み間違いは台本側の読み（yomi）で直す。次のセリフに重なる行は少しだけ速く読む。
+- `scripts/sfx.mjs` … ステレオの効果音・環境音（フィルタで合成）、BGM の自動作曲、声のエフェクト（機械音声・電話越し）、ナレーション中の音量下げ。
 
 ---
 

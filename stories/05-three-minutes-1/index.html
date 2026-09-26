@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>第5話「三分後の自分（前編）」</title>
+<link rel="stylesheet" href="../../node_modules/@fontsource/shippori-mincho/500.css">
+<link rel="stylesheet" href="../../node_modules/@fontsource/shippori-mincho/800.css">
+<link rel="stylesheet" href="../../node_modules/@fontsource/noto-sans-jp/400.css">
+<link rel="stylesheet" href="../../node_modules/@fontsource/noto-sans-jp/700.css">
+<link rel="stylesheet" href="../../lib/base.css">
+<script src="../../lib/mg.js"></script>
+<script src="../../lib/series.js"></script>
+<script src="../../lib/chat.js"></script>
+<script src="../../lib/threemin.js"></script>
+</head>
+<body>
+<script>
+const { W, H, seg, ease, lerp, clamp, rrect, noise1, kf } = MG;
+const NO = 5, TITLE = '三分後の自分', SUB = '前編', DURATION = 60;
+
+// ================= 脚本 =================
+// narrator=語り手 / future=スマホの向こうの「三分後の自分」（メッセージを読み上げる声）
+const NARR = S.lines([
+  [0.3, '夜中の十二時前。\n自分の番号から、メッセージが届いた。', 'narrator', 'よなかの、じゅうにじまえ。じぶんのばんごうから、メッセージがとどいた。'],
+  [5.4, '三分後、コーヒーをこぼす。', 'future', 'さんぷんご、コーヒーを、こぼす。'],
+  [8.4, 'いたずらだと思った。', 'narrator'],
+  [12.6, '三分後。コーヒーは、こぼれた。', 'narrator', 'さんぷんご。コーヒーは、こぼれた。'],
+  [16.0, '三分後、インターホンが鳴る。\n絶対に出るな。', 'future', 'さんぷんご、インターホンがなる。ぜったいに、でるな。'],
+  [20.6, '男は、息をひそめた。', 'narrator', 'おとこは、いきをひそめた。'],
+  [31.2, '三分後のおまえだ。', 'future', 'さんぷんごの、おまえだ。'],
+  [35.8, 'わからない。\n俺も、三分前の自分に送ってる。', 'future', 'わからない。おれも、さんぷんまえの、じぶんに、おくってる。'],
+  [40.4, '三分後の自分は、いつも正しかった。', 'narrator', 'さんぷんごの、じぶんは、いつも、ただしかった。'],
+  [44.1, '三分後、俺は死ぬ。', 'future', 'さんぷんご、おれは、しぬ。'],
+  [51.2, '返事は、もう来なかった。', 'narrator', 'へんじは、もう、こなかった。'],
+]);
+NARR.forEach((l) => { if (l.who === 'future') l.noCaption = true; });
+
+const T = {
+  spill: [9.8, 11.4], bell: [21.6, 23.0], door: 23.2, knock: 25.0, rattle: 26.2, leave: 27.6,
+  dead: 43.6, cd: 53.8, cont: 57.0, end: 58.2,
+};
+const chat = Chat.create({
+  title: '自分', subtitle: '090-3141-5926（あなたの番号）', avatar: '自', avatarColor: '#3a6df0',
+  clock: (t) => { const m = Math.floor(kf(t, [[0, 57], [T.spill[0], 57], [T.spill[1], 60], [T.bell[0], 60], [T.bell[1], 63], [T.dead, 74]])); return m < 60 ? `23:${m}` : `0:${String(m - 60).padStart(2, '0')}`; },
+  items: [
+    { kind: 'them', text: '3分後、コーヒーをこぼす', t: 0.8 },
+    { kind: 'them', text: '3分後、インターホンが鳴る。\n絶対に出るな', t: 15.8, danger: true },
+    { kind: 'me', text: 'おまえは誰だ', t: 29.6 },
+    { kind: 'them', text: '3分後のおまえだ', t: 31.0 },
+    { kind: 'me', text: 'なんで3分後なんだ', t: 34.2 },
+    { kind: 'them', text: 'わからない。\n俺も、3分前の自分に送ってる', t: 35.6 },
+    { kind: 'them', text: '3分後、俺は死ぬ', t: T.dead, danger: true },
+    { kind: 'me', text: 'どういうことだ', t: 48.0 },
+  ],
+  typing: [{ text: 'おまえは誰だ', a: 28.2, b: 29.3, until: 29.6 }, { text: 'なんで3分後なんだ', a: 32.8, b: 34.0, until: 34.2 }, { text: 'どういうことだ', a: 46.6, b: 47.7, until: 48.0 }],
+  dots: [[49.0, 50.6]],
+  reads: { 29.6: 30.2, 34.2: 34.8, 48.0: 48.6 },
+});
+
+// ================= 効果音・BGM =================
+const sfx = [
+  { t: 0, type: 'room', dur: DURATION, vol: 0.8 },
+  { t: 0, type: 'music', dur: 20, bpm: 60, chords: [[45, 48, 52], [41, 45, 48], [43, 47, 50], [40, 44, 47]], pattern: 'hold', vol: 0.5, stopAt: 20.4, fadeOut: 1 },
+  // 早送りで3分が過ぎる
+  { t: T.spill[0] - 0.2, type: 'reverse', dur: 1.6, vol: 0.5 },
+  { t: T.spill[1], type: 'glass', vol: 0.5 }, { t: T.spill[1] + 0.05, type: 'whoosh', dur: 0.6, vol: 0.7 },
+  { t: T.bell[0] - 0.2, type: 'reverse', dur: 1.6, vol: 0.5 },
+  { t: T.door, type: 'doorbell', vol: 1.0, pan: -0.4 },
+  { t: T.knock, type: 'knock', vol: 1.0, pan: -0.5 }, { t: T.rattle, type: 'rattle', vol: 0.8, pan: -0.5 },
+  { t: T.door, type: 'drone', dur: 8, vol: 0.9 },
+  // 「俺は死ぬ」
+  { t: T.dead - 1.4, type: 'riser', dur: 1.4, vol: 0.6 }, { t: T.dead, type: 'boom', vol: 1.0 }, { t: T.dead, type: 'glitch', dur: 0.35, vol: 0.6 },
+  { t: T.dead, type: 'drone', dur: DURATION - T.dead, vol: 1.0 },
+  { t: T.cont, type: 'boom', vol: 0.7 },
+];
+for (const it of [0.8, 15.8, 31.0, 35.6]) sfx.push({ t: it, type: 'notify', vol: 0.8 });
+sfx.push({ t: T.dead, type: 'notify', tone: 'low', vol: 1.0 });
+for (let i = 0; i < 4; i++) sfx.push({ t: T.leave + i * 0.5, type: 'step', hard: true, vol: 0.5 - i * 0.1, pan: -0.5 - i * 0.1 });
+for (const ty of [[28.2, 29.3], [32.8, 34.0], [46.6, 47.7]]) for (let t = ty[0]; t < ty[1]; t += 0.16) sfx.push({ t, type: 'tap', vol: 0.8, pitch: 1 + ((t * 7) % 1) * 0.2 });
+for (const t of [29.6, 34.2, 48.0]) sfx.push({ t, type: 'send', vol: 0.8 });
+// 心音（最後は速く）
+for (let t = T.door + 0.4, g = 0.9; t < T.leave + 1; t += g) sfx.push({ t, type: 'heart', vol: 0.8 });
+for (let t = 50.8, g = 0.9; t < T.cont; t += g, g = Math.max(0.42, g * 0.9)) sfx.push({ t, type: 'heart', vol: 0.9 });
+for (let t = T.cd; t < T.cont; t += 1) sfx.push({ t, type: 'clock', tock: Math.round(t) % 2, vol: 1 });
+
+// ================= 描画 =================
+function draw(ctx, t) {
+  // 死の予告のあとは画面が小刻みにゆれる
+  const shake = (t > T.dead && t < T.dead + 0.5 ? (1 - seg(t, T.dead, T.dead + 0.5)) * 24 : 0) + seg(t, 50, T.cont) * 4;
+  ctx.save(); ctx.translate(noise1(t * 30, 1) * shake, noise1(t * 30, 2) * shake);
+  chat.draw(ctx, t);
+  ctx.restore();
+  TM.coffee(ctx, t, T.spill[1]);
+  // 3分の早送り
+  for (const [a, b] of [T.spill, T.bell]) if (t > a && t < b + 0.6) TM.countdown(ctx, lerp(180, 0, seg(t, a, b)), Math.min(seg(t, a, a + 0.2), 1 - seg(t, b + 0.2, b + 0.6)));
+  // インターホン
+  TM.intercom(ctx, t, Math.min(seg(t, T.door, T.door + 0.4), 1 - seg(t, T.leave + 0.8, T.leave + 1.4)), seg(t, T.knock, T.rattle));
+  // 最後のカウントダウン（実時間）
+  const cda = seg(t, T.cd, T.cd + 0.4);
+  if (cda > 0) { ctx.fillStyle = `rgba(0,0,0,${0.55 * cda})`; ctx.fillRect(0, 0, W, H); TM.countdown(ctx, 180 - (t - T.cd), cda, true); }
+  // 赤いビネット
+  const v = seg(t, T.dead, T.dead + 1) * 0.5;
+  if (v > 0) { const g = ctx.createRadialGradient(W / 2, H / 2, H * 0.3, W / 2, H / 2, H * 0.75); g.addColorStop(0, 'rgba(120,0,10,0)'); g.addColorStop(1, `rgba(120,0,10,${v})`); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); }
+  S.caption(ctx, NARR, t, { y: 1500, style: 'box', size: 54, font: S.MIN(800, 54), boxColor: 'rgba(0,0,0,0.8)' });
+  // つづく
+  const ca = seg(t, T.cont, T.cont + 0.4);
+  if (ca > 0) { ctx.save(); ctx.fillStyle = `rgba(0,0,0,${0.6 * ca})`; ctx.fillRect(0, 0, W, H); TM.countdown(ctx, 180 - (t - T.cd), 1, true); ctx.globalAlpha = ca; ctx.fillStyle = '#fff'; ctx.font = S.MIN(800, 76); ctx.textAlign = 'center'; ctx.fillText('後編につづく', W / 2, 1260); ctx.restore(); }
+  S.logo(ctx, t, NO, true, 1320);
+  S.endCard(ctx, t, T.end, NO, `${TITLE}（${SUB}）`);
+}
+
+MG.create({ duration: DURATION, draw, sfx, narration: NARR, fonts: S.fonts(S.textOf(NARR, chat.text() + '後編につづく（）前編インターホン　玄関REC0:3123'), { sans: true }) });
+</script>
+</body>
+</html>

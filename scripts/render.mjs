@@ -44,9 +44,13 @@ function readWav(file) {
 // ナレーションを合成し、読みと長さを返す
 function speak(narration, name) {
   if (!narration.length) return [];
-  const input = narration.map((l, i) => ({ id: `${name}-${i}`, text: l.text.replace(/\n/g, ''), yomi: l.yomi, speed: l.speed, half_tone: l.halfTone }));
+  const input = narration.map((l, i) => ({
+    id: `${name}-${i}`, text: l.text.replace(/\n/g, ''), yomi: l.yomi, speed: l.speed, half_tone: l.halfTone,
+    vv: l.vv, vvSpeed: l.vvSpeed, vvPitch: l.vvPitch, vvIntonation: l.vvIntonation,
+    maxDur: narration[i + 1] ? narration[i + 1].t - l.t - 0.15 : undefined,
+  }));
   const res = JSON.parse(execFileSync('python3', [path.join(ROOT, 'scripts/tts.py')], { input: JSON.stringify(input), maxBuffer: 1 << 26 }).toString());
-  console.log(`\n[${name}] ナレーションの読み（読み間違いがないか確認）`);
+  console.log(`\n[${name}] ナレーションの読み（${res[0]?.engine}。読み間違いがないか確認）`);
   res.forEach((r, i) => {
     const l = narration[i], end = l.t + r.dur, next = narration[i + 1];
     const warn = next && end > next.t ? `  ⚠ 次の行(${next.t}s)と重なる` : '';
@@ -69,7 +73,7 @@ async function renderOne(browser, port, dir, ffmpeg) {
 
   const frames = Math.round(meta.duration * meta.fps);
   const wav = path.join(OUT, `.${name}.wav`);
-  fs.writeFileSync(wav, mix(meta.sfx, meta.duration, spoken.map((s, i) => ({ t: meta.narration[i].t, samples: readWav(s.wav), vol: meta.narration[i].vol }))));
+  fs.writeFileSync(wav, mix(meta.sfx, meta.duration, spoken.map((s, i) => ({ t: meta.narration[i].t, samples: readWav(s.wav), vol: meta.narration[i].vol, fx: meta.narration[i].fx }))));
 
   const mp4 = path.join(OUT, `${name}.mp4`);
   const ff = spawn(ffmpeg, ['-y', '-loglevel', 'error',

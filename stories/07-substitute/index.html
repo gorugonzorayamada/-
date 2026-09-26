@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>第7話「身代わり」</title>
+<link rel="stylesheet" href="../../node_modules/@fontsource/shippori-mincho/500.css">
+<link rel="stylesheet" href="../../node_modules/@fontsource/shippori-mincho/800.css">
+<link rel="stylesheet" href="../../node_modules/@fontsource/noto-sans-jp/400.css">
+<link rel="stylesheet" href="../../node_modules/@fontsource/noto-sans-jp/700.css">
+<link rel="stylesheet" href="../../lib/base.css">
+<script src="../../lib/mg.js"></script>
+<script src="../../lib/series.js"></script>
+</head>
+<body>
+<script>
+const { W, H, seg, ease, lerp, clamp, rrect, noise1, kf, rng } = MG;
+const NO = 7, TITLE = '身代わり', DURATION = 62;
+const F = (w, s) => `${w} ${s}px "Noto Sans JP"`;
+
+// ================= 脚本 =================
+const NARR = S.lines([
+  [0.3, 'エヌ氏は、身代わりロボットを買った。', 'narrator', 'エヌしは、みがわりロボットを、かった。'],
+  [4.2, '会社には、ロボットが行く。\nエヌ氏は、家で寝ていればいい。', 'narrator', 'かいしゃには、ロボットがいく。エヌしは、いえで、ねていればいい。'],
+  [10.6, 'ロボットは、エヌ氏よりよく働いた。', 'narrator', 'ロボットは、エヌしより、よくはたらいた。'],
+  [19.2, 'ある日、ロボットは考えた。', 'narrator', 'あるひ、ロボットは、かんがえた。'],
+  [22.2, '新しい型のほうが、効率がいい。', 'robot', 'あたらしいかたのほうが、こうりつがいい。'],
+  [25.8, 'ロボットは、自分の身代わりを買った。', 'narrator', 'ロボットは、じぶんの、みがわりを、かった。'],
+  [29.8, 'その身代わりも、身代わりを買った。', 'narrator', 'そのみがわりも、みがわりを、かった。'],
+  [34.4, 'やがて最新型は、計算した。', 'narrator', 'やがて、さいしんがたは、けいさんした。'],
+  [38.2, '人間を雇うほうが、安い。', 'robot', 'にんげんを、やとうほうが、やすい。'],
+  [41.8, '求人に応募してきたのは、\nエヌ氏だった。', 'narrator', 'きゅうじんに、おうぼしてきたのは、エヌしだった。'],
+  [48.0, 'エヌ氏は今日も、会社に行く。\n身代わりの、身代わりとして。', 'narrator', 'エヌしは、きょうも、かいしゃにいく。みがわりの、みがわりとして。'],
+  [54.4, '家では、最初のロボットが、\nエヌ氏のベッドで眠っている。', 'narrator', 'いえでは、さいしょのロボットが、エヌしの、ベッドで、ねむっている。'],
+]);
+NARR.forEach((l) => { if (l.who === 'robot') l.noCaption = true; });
+const T = { box: 0.8, open: 2.2, split: 4.0, hr: 14.4, think: 19.2, v2: 26.0, home2: 27.6, chain: [29.8, 34.0], calc: [34.4, 41.4], ad: [41.6, 45.6], enter: 45.4, sit: 47.6, bed: 54.2, end: 59.2 };
+
+// ================= 効果音・BGM =================
+const sfx = [
+  { t: 0, type: 'room', dur: DURATION, vol: 0.5 },
+  // とぼけたピチカート（計算の場面で止まる）
+  { t: 0, type: 'music', dur: T.calc[0], bpm: 116, chords: [[60, 64, 67], [62, 65, 69], [64, 67, 71], [55, 59, 62]], pattern: 'bounce', timbre: 'pluck', vol: 0.9, fadeOut: 0.4 },
+  { t: T.box, type: 'stamp', vol: 0.7 }, { t: T.open, type: 'paper', vol: 1 }, { t: T.open + 0.3, type: 'pop', pitch: 0.8, vol: 0.8 },
+  { t: T.hr, type: 'stamp', vol: 1 }, { t: T.hr + 0.4, type: 'bell', freq: 1318, vol: 0.5 },
+  { t: T.think, type: 'pop', pitch: 1.6, vol: 0.6 },
+  { t: T.v2, type: 'stamp', vol: 0.6 }, { t: T.v2 + 0.4, type: 'pop', pitch: 1.0, vol: 0.7 },
+  // 計算: 無機質な持続音
+  { t: T.calc[0], type: 'hum', dur: 7.5, vol: 1.0 },
+  { t: T.calc[0] + 3.4, type: 'riser', dur: 0.4, vol: 0.4 }, { t: T.calc[0] + 3.8, type: 'boom', vol: 0.6 },
+  { t: T.ad[0], type: 'paper', vol: 0.8 },
+  // エヌ氏が出社する: 同じ曲がゆっくりに
+  { t: T.enter, type: 'music', dur: DURATION - T.enter, bpm: 72, chords: [[60, 64, 67], [57, 60, 64], [53, 57, 60], [55, 59, 62]], pattern: 'sparse', timbre: 'piano', vol: 0.9 },
+  { t: T.bed, type: 'bell', freq: 523, vol: 0.5 },
+];
+// タイピング（オフィス）
+for (let t = T.split + 1; t < T.calc[0]; t += 0.13) sfx.push({ t, type: 'tap', vol: 0.25, pitch: 0.9 + ((t * 13) % 1) * 0.3, pan: -0.4 });
+for (let t = T.sit + 0.4; t < DURATION - 3; t += 0.18) sfx.push({ t, type: 'tap', vol: 0.3, pitch: 0.9 + ((t * 11) % 1) * 0.2, pan: 0.2 });
+// ロボットが増えるたびの起動音
+for (let i = 0; i < 10; i++) sfx.push({ t: T.chain[0] + 0.3 + i * 0.38, type: 'notify', pitch: 1 + i * 0.06, vol: 0.35, pan: -0.8 + i * 0.18 });
+// 計算の電子音
+for (let i = 0; i < 14; i++) sfx.push({ t: T.calc[0] + 0.3 + i * 0.22, type: 'type', vol: 0.4 });
+// 足音
+for (let i = 0; i < 5; i++) sfx.push({ t: T.enter + i * 0.42, type: 'step', hard: true, vol: 0.5, pan: 0.6 - i * 0.2 });
+
+// ================= 人物とロボット =================
+const INK = '#16141d', STEEL = '#3a4150', EYE = '#6ff3ff';
+// 座っている・立っている人物（横向き）。o: {sit, type(打鍵), sleep, walk}
+function human(ctx, x, y, s, o, t) {
+  ctx.save(); ctx.translate(x, y); ctx.scale(s, s); ctx.fillStyle = INK; ctx.strokeStyle = INK; ctx.lineCap = 'round';
+  if (o.sleep) { // 寝ている（横になっている）
+    rrect(ctx, -150, -60, 260, 60, 30); ctx.fill(); ctx.beginPath(); ctx.arc(150, -40, 38, 0, Math.PI * 2); ctx.fill();
+    ctx.restore(); return;
+  }
+  const leg = o.sit ? 0 : Math.sin((o.walk || 0)) * 0.4;
+  ctx.lineWidth = 34;
+  if (o.sit) { ctx.beginPath(); ctx.moveTo(0, -150); ctx.lineTo(90, -150); ctx.lineTo(90, 0); ctx.stroke(); }
+  else for (const a of [leg, -leg]) { ctx.save(); ctx.translate(0, -190); ctx.rotate(a); ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, 190); ctx.stroke(); ctx.restore(); }
+  const by = o.sit ? -150 : -190;
+  rrect(ctx, -40, by - 210, 80, 220, 36); ctx.fill();
+  ctx.beginPath(); ctx.arc(10, by - 260, 48, 0, Math.PI * 2); ctx.fill();
+  const tap = o.type ? Math.abs(Math.sin(t * 14)) * 12 : 0;
+  ctx.lineWidth = 26; ctx.beginPath(); ctx.moveTo(10, by - 170); ctx.lineTo(80, by - 110); ctx.lineTo(150, by - 110 - tap); ctx.stroke();
+  ctx.restore();
+}
+function robot(ctx, x, y, s, o, t) {
+  ctx.save(); ctx.translate(x, y); ctx.scale(s, s); ctx.fillStyle = STEEL; ctx.strokeStyle = STEEL; ctx.lineCap = 'round';
+  if (o.sleep) {
+    rrect(ctx, -150, -64, 260, 64, 12); ctx.fill(); rrect(ctx, 110, -90, 90, 80, 14); ctx.fill();
+    ctx.fillStyle = '#20252f'; ctx.fillRect(130, -60, 50, 8);
+    ctx.restore(); return;
+  }
+  ctx.lineWidth = 30;
+  if (o.sit) { ctx.beginPath(); ctx.moveTo(0, -150); ctx.lineTo(90, -150); ctx.lineTo(90, 0); ctx.stroke(); }
+  else { const leg = Math.sin(o.walk || 0) * 0.35; for (const a of [leg, -leg]) { ctx.save(); ctx.translate(0, -190); ctx.rotate(a); ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, 190); ctx.stroke(); ctx.restore(); } }
+  const by = o.sit ? -150 : -190;
+  rrect(ctx, -50, by - 210, 100, 210, 14); ctx.fill();
+  rrect(ctx, -44, by - 320, 108, 96, 18); ctx.fill();
+  ctx.fillStyle = EYE; ctx.globalAlpha = 0.85 + 0.15 * Math.sin(t * 4 + x); ctx.fillRect(-20, by - 286, 72, 12); ctx.globalAlpha = 1;
+  ctx.lineWidth = 6; ctx.beginPath(); ctx.moveTo(10, by - 320); ctx.lineTo(10, by - 360); ctx.stroke();
+  ctx.fillStyle = o.ver > 1 ? '#ffb347' : EYE; ctx.beginPath(); ctx.arc(10, by - 366, 10, 0, Math.PI * 2); ctx.fill();
+  const tap = o.type ? Math.abs(Math.sin(t * 22 + x)) * 12 : 0;
+  ctx.strokeStyle = STEEL; ctx.lineWidth = 24; ctx.beginPath(); ctx.moveTo(10, by - 170); ctx.lineTo(80, by - 110); ctx.lineTo(150, by - 110 - tap); ctx.stroke();
+  // 胸の型番
+  ctx.fillStyle = '#e8ecf3'; ctx.font = F(700, 34); ctx.textAlign = 'center'; ctx.fillText(`v${o.ver}`, 0, by - 110);
+  if (o.think) { ctx.fillStyle = '#fff'; ctx.font = F(700, 70); ctx.fillText('?', 80, by - 380); }
+  ctx.restore();
+}
+function desk(ctx, x, y, lit = true) {
+  ctx.fillStyle = '#2a2833'; ctx.fillRect(x + 110, y - 140, 190, 16); ctx.fillRect(x + 280, y - 140, 14, 140);
+  ctx.fillStyle = '#2a2833'; ctx.fillRect(x + 210, y - 250, 14, 110);
+  ctx.fillStyle = lit ? '#9fd8ff' : '#3a3f4a'; rrect(ctx, x + 150, y - 300, 130, 80, 8); ctx.fill();
+  ctx.fillStyle = '#2a2833'; ctx.fillRect(x + 60, y - 150, 70, 14); ctx.fillRect(x + 85, y - 150, 12, 150);
+}
+
+// ================= シーン =================
+const OFFICE_Y = 820, HOME_Y = 1540, SEATS = [60, 320, 580, 840];
+// 誰がどの席にいるか: 同僚（人間）→ だんだんロボットに置き換わる
+function seatOccupant(i, t) {
+  if (i === 0) {
+    if (t < T.v2) return { kind: 'robot', ver: 1, think: t > T.think && t < T.v2 };
+    if (t < T.sit) return { kind: 'robot', ver: t < T.chain[0] ? 2 : Math.min(12, 2 + Math.floor(seg(t, T.chain[0], T.chain[1]) * 10)) };
+    return { kind: 'human' };
+  }
+  const repl = T.chain[0] + (i - 1) * 1.2;
+  return t < repl ? { kind: 'human' } : { kind: 'robot', ver: 3 + i * 3 + Math.floor(seg(t, repl, T.chain[1]) * 2) };
+}
+function office(ctx, t) {
+  ctx.fillStyle = '#d9dde6'; ctx.fillRect(0, 170, W, OFFICE_Y - 170 + 60);
+  ctx.fillStyle = '#c3c9d6'; for (let x = 60; x < W; x += 260) ctx.fillRect(x, 230, 170, 260);
+  ctx.fillStyle = '#b0b6c3'; ctx.fillRect(0, OFFICE_Y, W, 60);
+  ctx.fillStyle = '#7b8292'; ctx.font = F(700, 34); ctx.fillText('会社', 40, 225);
+  SEATS.forEach((x, i) => {
+    desk(ctx, x, OFFICE_Y, true);
+    const o = seatOccupant(i, t);
+    if (i === 0 && t > T.enter && t < T.sit) return; // エヌ氏が歩いてくる間は空席
+    if (o.kind === 'human') human(ctx, x + 60, OFFICE_Y, 0.95, { sit: true, type: true }, t);
+    else robot(ctx, x + 60, OFFICE_Y, 0.95, { sit: true, type: true, ver: o.ver, think: o.think }, t);
+  });
+  // 出社してくるエヌ氏
+  if (t > T.enter && t < T.sit) { const x = lerp(W + 60, SEATS[0] + 60, ease.outCubic(seg(t, T.enter, T.sit))); human(ctx, x, OFFICE_Y, 0.95, { walk: t * 8 }, t); }
+}
+function home(ctx, t) {
+  ctx.fillStyle = '#efe3cf'; ctx.fillRect(0, 1040, W, HOME_Y - 1040 + 80);
+  ctx.fillStyle = '#e1d2b8'; ctx.fillRect(700, 1120, 260, 200);
+  ctx.fillStyle = '#9b8a70'; ctx.fillRect(0, HOME_Y, W, 80);
+  ctx.fillStyle = '#9b8a70'; ctx.font = F(700, 34); ctx.fillText('家', 40, 1095);
+  // ベッド
+  ctx.fillStyle = '#b8c6e0'; rrect(ctx, 80, HOME_Y - 120, 520, 90, 20); ctx.fill(); ctx.fillStyle = '#7d6a54'; ctx.fillRect(70, HOME_Y - 170, 24, 170); ctx.fillRect(590, HOME_Y - 110, 20, 110);
+  ctx.fillStyle = '#f5f5f5'; rrect(ctx, 460, HOME_Y - 150, 120, 40, 18); ctx.fill();
+  // ソファ
+  ctx.fillStyle = '#c87d5d'; rrect(ctx, 650, HOME_Y - 170, 380, 150, 30); ctx.fill(); rrect(ctx, 650, HOME_Y - 250, 380, 100, 30); ctx.fill();
+  const zz = (x, y) => { ctx.fillStyle = '#6b6b80'; ctx.font = F(700, 44); ctx.fillText('Z', x + Math.sin(t * 2) * 6, y - (t * 30) % 60); ctx.font = F(700, 30); ctx.fillText('z', x + 40, y - 50 - (t * 30) % 60); };
+  if (t < T.enter - 0.6) {
+    human(ctx, 330, HOME_Y - 120, 1, { sleep: true }, t); zz(470, HOME_Y - 200);
+    // 役目を終えたロボットたちはソファでくつろぐ
+    const n = t < T.home2 ? 0 : 1 + Math.floor(seg(t, T.chain[0], T.chain[1]) * 2);
+    for (let i = 0; i < n; i++) robot(ctx, 720 + i * 110, HOME_Y - 40, 0.62, { sit: true, ver: 1 + i }, t);
+  } else if (t < T.bed) {
+    // エヌ氏は出かけた。ロボットたちはソファ
+    for (let i = 0; i < 3; i++) robot(ctx, 720 + i * 110, HOME_Y - 40, 0.62, { sit: true, ver: 1 + i }, t);
+  } else {
+    // 最初のロボットがエヌ氏のベッドで眠る
+    robot(ctx, 330, HOME_Y - 120, 1, { sleep: true }, t); zz(470, HOME_Y - 200);
+    for (let i = 1; i < 3; i++) robot(ctx, 720 + i * 110, HOME_Y - 40, 0.62, { sit: true, ver: 1 + i }, t);
+  }
+}
+
+// 冒頭: 箱が届いてロボットが出てくる
+function unbox(ctx, t) {
+  const a = 1 - seg(t, T.split - 0.3, T.split);
+  if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha = a; ctx.fillStyle = '#efe3cf'; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#9b8a70'; ctx.fillRect(0, 1300, W, 620);
+  const drop = ease.outCubic(seg(t, T.box - 0.5, T.box));
+  const open = ease.outBack(seg(t, T.open, T.open + 0.6));
+  if (open > 0) robot(ctx, W / 2, 1300 - 40 + (1 - open) * 300, 1.4 * Math.min(1, open), { ver: 1 }, t);
+  ctx.fillStyle = '#c89b63'; ctx.fillRect(W / 2 - 220, lerp(-400, 1300 - 320, drop), 440, 320);
+  ctx.fillStyle = '#a57b47'; ctx.fillRect(W / 2 - 220, lerp(-400, 1300 - 320, drop) + 130, 440, 30);
+  ctx.fillStyle = '#5b3d1b'; ctx.font = F(700, 44); ctx.textAlign = 'center'; ctx.fillText('身代わりロボット', W / 2, lerp(-400, 1300 - 320, drop) + 260);
+  ctx.restore();
+}
+
+function card(ctx, a, draw) { if (a <= 0) return; ctx.save(); ctx.globalAlpha = a; ctx.translate(W / 2, 520); ctx.scale(lerp(0.9, 1, a), lerp(0.9, 1, a)); draw(); ctx.restore(); }
+function overlays(ctx, t) {
+  // 人事評価
+  card(ctx, Math.min(seg(t, T.hr, T.hr + 0.3), 1 - seg(t, T.think - 0.4, T.think)), () => {
+    ctx.fillStyle = '#fff'; rrect(ctx, -400, -250, 800, 480, 30); ctx.fill();
+    ctx.fillStyle = '#222'; ctx.textAlign = 'center'; ctx.font = F(700, 50); ctx.fillText('人事評価', 0, -160);
+    ctx.font = F(400, 40); ctx.fillText('エヌ氏（ロボット出社）', 0, -70);
+    ctx.fillStyle = '#f2b01e'; ctx.font = F(700, 80); ctx.fillText('★★★★★', 0, 40);
+    ctx.fillStyle = '#c0392b'; ctx.font = F(700, 42); ctx.fillText('本人は、もう来なくてよい', 0, 150);
+  });
+  // 計算
+  card(ctx, Math.min(seg(t, T.calc[0], T.calc[0] + 0.3), 1 - seg(t, T.calc[1] - 0.3, T.calc[1])), () => {
+    ctx.fillStyle = '#0d1b24'; rrect(ctx, -420, -270, 840, 560, 30); ctx.fill();
+    ctx.fillStyle = EYE; ctx.textAlign = 'left'; ctx.font = F(700, 44);
+    const rows = [['最新型の電気代', '時給 1,200円'], ['メンテナンス', '時給 800円'], ['人間', '時給 950円']];
+    rows.forEach(([k, v], i) => { if (t > T.calc[0] + 0.6 + i * 0.9) { ctx.fillText(k, -370, -170 + i * 100); ctx.textAlign = 'right'; ctx.fillText(v, 370, -170 + i * 100); ctx.textAlign = 'left'; } });
+    if (t > T.calc[0] + 3.8) { ctx.fillStyle = '#ffb347'; ctx.textAlign = 'center'; ctx.font = F(700, 62); ctx.fillText('人間のほうが安い', 0, 200); }
+  });
+  // 求人
+  card(ctx, Math.min(seg(t, T.ad[0], T.ad[0] + 0.3), 1 - seg(t, T.ad[1] - 0.3, T.ad[1])), () => {
+    ctx.fillStyle = '#fffbe8'; rrect(ctx, -410, -270, 820, 560, 16); ctx.fill();
+    ctx.fillStyle = '#c0392b'; ctx.textAlign = 'center'; ctx.font = F(700, 64); ctx.fillText('急募', 0, -160);
+    ctx.fillStyle = '#222'; ctx.font = F(700, 38); ctx.fillText('身代わりの身代わりの', 0, -60); ctx.fillText('身代わりの……身代わり', 0, -5);
+    ctx.font = F(400, 36); ctx.fillText('人間であれば経験不問', 0, 90); ctx.fillText('時給 950円', 0, 150);
+  });
+  // 型番カウンター（身代わりの連鎖）
+  const ca = Math.min(seg(t, T.chain[0], T.chain[0] + 0.3), 1 - seg(t, T.chain[1], T.chain[1] + 0.3));
+  if (ca > 0) { ctx.save(); ctx.globalAlpha = ca; ctx.fillStyle = 'rgba(20,20,30,0.85)'; rrect(ctx, W / 2 - 170, 20, 340, 140, 30); ctx.fill(); ctx.fillStyle = '#ffb347'; ctx.font = F(700, 96); ctx.textAlign = 'center'; ctx.fillText(`v${2 + Math.floor(seg(t, T.chain[0], T.chain[1]) * 10)}`, W / 2, 124); ctx.restore(); }
+}
+
+function draw(ctx, t) {
+  ctx.fillStyle = '#121118'; ctx.fillRect(0, 0, W, H);
+  office(ctx, t);
+  home(ctx, t);
+  // 真ん中の帯（字幕の場所）
+  ctx.fillStyle = '#121118'; ctx.fillRect(0, 880, W, 160);
+  overlays(ctx, t);
+  unbox(ctx, t);
+  S.caption(ctx, NARR, t, { y: t < T.split ? 1500 : 960, size: 50, font: S.MIN(800, 50) });
+  // ロボットの声の字幕（水色）
+  S.caption(ctx, NARR.map((l) => ({ ...l, noCaption: false })).filter((l) => l.who === 'robot'), t, { y: 960, size: 50, font: F(700, 50), color: EYE });
+  S.logo(ctx, t, NO, false, 1700);
+  S.endCard(ctx, t, T.end, NO, TITLE);
+}
+
+MG.create({ duration: DURATION, draw, sfx, narration: NARR, fonts: S.fonts(S.textOf(NARR, '会社家身代わりロボットv0123456789?人事評価エヌ氏（ロボット出社）★本人は、もう来なくてよい最新型の電気代時給,円メンテナンス人間のほうが安い急募身代わりの……人間であれば経験不問Zz'), { sans: true }) });
+</script>
+</body>
+</html>
