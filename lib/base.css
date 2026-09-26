@@ -1,0 +1,10 @@
+html, body { margin: 0; height: 100%; background: #111; }
+body { display: flex; flex-direction: column; align-items: center; justify-content: center; }
+canvas { height: calc(100vh - 56px); aspect-ratio: 9 / 16; display: block; }
+body:has(#mg-bar) canvas { box-shadow: 0 0 0 1px #333; }
+#mg-bar { display: flex; gap: 12px; align-items: center; height: 48px; width: min(100%, 560px); padding: 0 16px; box-sizing: border-box; color: #ccc; font: 14px system-ui, sans-serif; }
+#mg-bar input { flex: 1; }
+#mg-bar button { background: #333; color: #fff; border: 0; border-radius: 6px; width: 40px; height: 32px; cursor: pointer; }
+/* 書き出し時はキャンバスを等倍で表示 */
+body:not(:has(#mg-bar)) canvas { height: 1920px; width: 1080px; }
+body:not(:has(#mg-bar)) { display: block; }

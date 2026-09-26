@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>01 チャット画面ドラマ「知らない番号」</title>
+<link rel="stylesheet" href="../../node_modules/@fontsource/noto-sans-jp/400.css">
+<link rel="stylesheet" href="../../node_modules/@fontsource/noto-sans-jp/700.css">
+<link rel="stylesheet" href="../../lib/base.css">
+<script src="../../lib/mg.js"></script>
+</head>
+<body>
+<script>
+// ================= 脚本 =================
+// from: them=相手 / me=自分。t=表示される時刻。
+// them は typing 区間に「入力中…」を表示。me は typing 区間で入力欄に文字を打つ。
+const NUMBER = '090-4417-8823';
+const MSGS = [
+  { from: 'them', t: 0.5, text: '起きてる？' },
+  { from: 'me', t: 2.6, typing: [[1.5, 2.5]], text: '誰ですか？' },
+  { from: 'them', t: 4.6, typing: [[3.1, 4.5]], text: '今日、駅で青い傘さしてたよね' },
+  { from: 'me', t: 7.0, typing: [[5.6, 6.9]], text: 'え、なんで知ってるの' },
+  { from: 'them', t: 8.5, typing: [[7.6, 8.4]], text: '帰りにコンビニ寄ったでしょ' },
+  { from: 'them', t: 9.9, typing: [[9.1, 9.8]], text: 'からあげ棒、2本も' },
+  { from: 'me', t: 12.3, typing: [[10.9, 12.2]], text: 'やめてください。\n警察呼びます' },
+  { from: 'them', t: 16.2, typing: [[13.0, 14.3], [15.0, 16.1]], text: '呼んでもいいよ' },
+  { from: 'them', t: 17.6, typing: [[16.9, 17.5]], text: 'でもその前に' },
+  { from: 'them', t: 19.0, typing: [[18.2, 18.9]], text: '自分のプロフィール、\n見てみて' },
+  { from: 'them', t: 25.2, typing: [[24.2, 25.1]], text: 'やっと気づいた？', final: true },
+];
+// どんでん返し: プロフィールの番号 = 相手の番号
+const T_ZOOM = 20.2, T_CARD = 21.0, T_MATCH = 22.4, T_ME_TYPE = [23.0, 24.0], T_BACK = 24.1, T_GLITCH = 26.6, T_END = 27.2;
+const DURATION = 31;
+
+// ================= 効果音 =================
+const sfx = [{ t: 0, type: 'drone', dur: DURATION, vol: 0.8 }];
+for (const m of MSGS) {
+  if (m.from === 'them') sfx.push({ t: m.t, type: 'ping', vol: m.final ? 1.2 : 0.8, pitch: m.final ? 0.75 : 1 });
+  else {
+    const [a, b] = m.typing[0], n = [...m.text].length;
+    for (let i = 0; i < n; i++) sfx.push({ t: a + (b - a) * i / n, type: 'tick', vol: 0.6 });
+    sfx.push({ t: m.t, type: 'send' });
+  }
+}
+// 緊張が高まるにつれて速くなる心音
+for (let t = 13, gap = 1.0; t < 25; t += gap, gap = Math.max(0.42, gap * 0.94)) sfx.push({ t, type: 'thump', vol: 0.7 }, { t: t + 0.16, type: 'thump', vol: 0.45 });
+sfx.push({ t: T_ZOOM, type: 'whoosh', dur: 0.7 }, { t: T_MATCH, type: 'hit' });
+for (let i = 0; i < 5; i++) sfx.push({ t: T_ME_TYPE[0] + i * 0.18, type: 'tick', vol: 0.6 });
+sfx.push({ t: T_GLITCH, type: 'hit', vol: 1.2 }, { t: T_END + 0.4, type: 'bell', freq: 440 });
+
+// ================= 見た目 =================
+const { W, H, seg, ease, lerp, clamp, rrect, wrap, noise1 } = MG;
+const F = (w, s) => `${w} ${s}px "Noto Sans JP"`;
+const C = { bg: '#0e0f13', head: '#16181e', them: '#262932', me: '#3a6df0', text: '#f2f3f5', sub: '#8b8f9a', red: '#ff3b4a' };
+const TOP = 250, BOTTOM = 1700, PADX = 40, BUB_MAX = 860, FS = 54, LH = 74;
+
+let measure; // 吹き出しサイズを事前計算
+function layout(ctx) {
+  if (measure) return;
+  ctx.font = F(400, FS);
+  measure = MSGS.map((m) => {
+    const lines = wrap(ctx, m.text, BUB_MAX - 64);
+    const w = Math.max(...lines.map((l) => ctx.measureText(l).width)) + 64;
+    return { lines, w, h: lines.length * LH + 40 };
+  });
+}
+
+function typingDots(ctx, x, y, t) {
+  ctx.fillStyle = C.them; rrect(ctx, x, y, 170, 92, 46); ctx.fill();
+  for (let i = 0; i < 3; i++) {
+    const b = Math.max(0, Math.sin(t * 9 - i * 0.9));
+    ctx.fillStyle = `rgba(200,204,214,${0.4 + 0.6 * b})`;
+    ctx.beginPath(); ctx.arc(x + 48 + i * 37, y + 46 - b * 10, 11, 0, Math.PI * 2); ctx.fill();
+  }
+}
+
+function avatar(ctx, x, y, r, label, color) {
+  ctx.fillStyle = color; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#fff'; ctx.font = F(700, r * 0.9); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(label, x, y + 2); ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+}
+
+function drawChat(ctx, t) {
+  layout(ctx);
+  // タイムライン上のアイテム（吹き出し + 入力中表示）を積み上げる
+  const items = [];
+  MSGS.forEach((m, i) => {
+    if (m.from === 'them') for (const [a, b] of m.typing || []) {
+      const vis = Math.min(seg(t, a, a + 0.2), 1 - seg(t, b, b + 0.12));
+      if (vis > 0) items.push({ kind: 'dots', h: 92, vis });
+    }
+    const p = seg(t, m.t, m.t + 0.3);
+    if (p > 0) items.push({ kind: 'msg', i, h: measure[i].h, vis: p });
+  });
+  const GAP = 30;
+  const total = items.reduce((s, it) => s + (it.h + GAP) * ease.outCubic(Math.min(1, it.vis * 1.4)), 0);
+  const scroll = Math.max(0, total - (BOTTOM - TOP - 130));
+  let y = TOP + 30 - scroll;
+
+  ctx.save(); ctx.beginPath(); ctx.rect(0, TOP, W, BOTTOM - TOP); ctx.clip();
+  // 日付ラベル
+  ctx.fillStyle = C.sub; ctx.font = F(400, 32); ctx.textAlign = 'center';
+  ctx.fillText('今日 2:14', W / 2, y + 20); ctx.textAlign = 'left';
+  y += 60;
+  for (const it of items) {
+    const grow = ease.outCubic(Math.min(1, it.vis * 1.4));
+    const s = lerp(0.7, 1, ease.outBack(it.vis));
+    ctx.globalAlpha = clamp(it.vis * 2);
+    if (it.kind === 'dots') {
+      ctx.save(); ctx.translate(PADX + 110, y); ctx.scale(s, s); typingDots(ctx, 0, 0, t); ctx.restore();
+    } else {
+      const m = MSGS[it.i], me = measure[it.i], mine = m.from === 'me';
+      const x = mine ? W - PADX - me.w : PADX + 110;
+      ctx.save();
+      ctx.translate(mine ? x + me.w : x, y + me.h); ctx.scale(s, s); ctx.translate(mine ? -me.w : 0, -me.h);
+      ctx.fillStyle = mine ? C.me : (m.final ? '#3a1015' : C.them);
+      rrect(ctx, 0, 0, me.w, me.h, 40); ctx.fill();
+      if (m.final) { ctx.strokeStyle = C.red; ctx.lineWidth = 3; ctx.stroke(); }
+      ctx.fillStyle = C.text; ctx.font = F(400, FS);
+      me.lines.forEach((l, k) => ctx.fillText(l, 32, 20 + LH * k + 46));
+      ctx.restore();
+      if (!mine) { ctx.globalAlpha *= 1; avatar(ctx, PADX + 42, y + me.h - 42, 42, '?', '#4a4e5a'); }
+    }
+    ctx.globalAlpha = 1;
+    y += (it.h + GAP) * grow;
+  }
+  ctx.restore();
+}
+
+function drawHeader(ctx, t, highlight) {
+  ctx.fillStyle = C.head; ctx.fillRect(0, 0, W, TOP);
+  ctx.fillStyle = C.text; ctx.font = F(700, 34);
+  ctx.fillText('2:14', 70, 70);
+  ctx.textAlign = 'right'; ctx.fillText('▮▮▮  87%', W - 60, 70); ctx.textAlign = 'left';
+  ctx.strokeStyle = C.text; ctx.lineWidth = 6; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(84, 150); ctx.lineTo(60, 174); ctx.lineTo(84, 198); ctx.stroke();
+  avatar(ctx, 170, 174, 44, '?', '#4a4e5a');
+  ctx.font = F(700, 44); ctx.fillStyle = highlight ? C.red : C.text; ctx.fillText(NUMBER, 236, 166);
+  ctx.font = F(400, 28); ctx.fillStyle = C.sub; ctx.fillText('連絡先に登録されていません', 236, 208);
+}
+
+function drawInput(ctx, t) {
+  ctx.fillStyle = C.head; ctx.fillRect(0, BOTTOM, W, H - BOTTOM);
+  ctx.fillStyle = '#23262e'; rrect(ctx, 48, BOTTOM + 40, W - 200, 96, 48); ctx.fill();
+  // 入力中の文字
+  let txt = '', caret = false;
+  for (const m of MSGS) if (m.from === 'me') {
+    const [a, b] = m.typing[0];
+    if (t >= a && t < m.t) { const n = [...m.text]; txt = n.slice(0, Math.ceil(n.length * seg(t, a, b))).join(''); caret = true; }
+  }
+  if (t >= T_ME_TYPE[0] && t < T_BACK + 1.2) {
+    const s = 'え、これ私の'; const n = [...s];
+    txt = n.slice(0, Math.ceil(n.length * seg(t, T_ME_TYPE[0], T_ME_TYPE[1]))).join('');
+    caret = true;
+  }
+  ctx.font = F(400, 42); ctx.fillStyle = txt ? C.text : C.sub;
+  ctx.fillText(txt || 'メッセージを入力', 90, BOTTOM + 103);
+  if (caret && Math.floor(t * 2.5) % 2 === 0) { const w = ctx.measureText(txt).width; ctx.fillStyle = C.me; ctx.fillRect(92 + w, BOTTOM + 62, 4, 52); }
+  ctx.fillStyle = C.me; ctx.beginPath(); ctx.arc(W - 100, BOTTOM + 88, 48, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.moveTo(W - 120, BOTTOM + 66); ctx.lineTo(W - 74, BOTTOM + 88); ctx.lineTo(W - 120, BOTTOM + 110); ctx.lineTo(W - 112, BOTTOM + 88); ctx.fill();
+}
+
+function drawProfileCard(ctx, t) {
+  const p = ease.outCubic(seg(t, T_CARD, T_CARD + 0.6)) * (1 - ease.inCubic(seg(t, T_BACK, T_BACK + 0.5)));
+  if (p <= 0) return;
+  ctx.fillStyle = `rgba(0,0,0,${0.55 * p})`; ctx.fillRect(0, 0, W, H);
+  const y = lerp(H, 900, p);
+  ctx.fillStyle = '#1c1f27'; rrect(ctx, 60, y, W - 120, 620, 48); ctx.fill();
+  ctx.fillStyle = C.sub; ctx.font = F(700, 34); ctx.fillText('マイプロフィール', 120, y + 90);
+  avatar(ctx, 200, y + 250, 90, '私', C.me);
+  ctx.fillStyle = C.text; ctx.font = F(700, 56); ctx.fillText('あなた', 330, y + 240);
+  ctx.fillStyle = C.sub; ctx.font = F(400, 32); ctx.fillText('電話番号', 120, y + 440);
+  const m = seg(t, T_MATCH, T_MATCH + 0.15);
+  ctx.fillStyle = m > 0 ? C.red : C.text; ctx.font = F(700, 64);
+  ctx.fillText(NUMBER, 120, y + 530);
+  if (m > 0) { // 一致を示す下線
+    ctx.fillStyle = C.red; ctx.fillRect(120, y + 552, ctx.measureText(NUMBER).width * ease.outCubic(seg(t, T_MATCH, T_MATCH + 0.4)), 6);
+  }
+}
+
+function drawHook(ctx, t) {
+  // 冒頭1秒で状況を伝えるキャプション
+  const a = Math.min(seg(t, 0, 0.3), 1 - seg(t, 3.2, 3.7));
+  if (a <= 0) return;
+  ctx.globalAlpha = a;
+  ctx.fillStyle = 'rgba(0,0,0,0.75)'; rrect(ctx, 80, 1180, W - 160, 200, 30); ctx.fill();
+  ctx.fillStyle = '#fff'; ctx.font = F(700, 54); ctx.textAlign = 'center';
+  ctx.fillText('深夜2時。', W / 2, 1262);
+  ctx.fillText('知らない番号から連絡が来た', W / 2, 1340);
+  ctx.textAlign = 'left'; ctx.globalAlpha = 1;
+}
+
+function drawEnd(ctx, t) {
+  const a = seg(t, T_END, T_END + 0.8);
+  if (a <= 0) return;
+  ctx.fillStyle = `rgba(0,0,0,${0.93 * a})`; ctx.fillRect(0, 0, W, H);
+  ctx.globalAlpha = a; ctx.textAlign = 'center';
+  ctx.fillStyle = C.sub; ctx.font = F(400, 40); ctx.fillText('第1話', W / 2, 860);
+  ctx.fillStyle = C.text; ctx.font = F(700, 88); ctx.fillText('知らない番号', W / 2, 980);
+  ctx.globalAlpha = seg(t, T_END + 1.2, T_END + 1.8);
+  ctx.fillStyle = C.red; ctx.font = F(700, 52); ctx.fillText('つづく', W / 2, 1140);
+  ctx.textAlign = 'left'; ctx.globalAlpha = 1;
+}
+
+function draw(ctx, t) {
+  ctx.fillStyle = C.bg; ctx.fillRect(0, 0, W, H);
+  // カメラ: 緊張で手ぶれ、どんでん返しでヘッダーにズーム
+  const shake = seg(t, 13, 25) * 6 + (t > T_GLITCH && t < T_GLITCH + 0.4 ? 30 : 0);
+  const z = ease.inOut(seg(t, T_ZOOM, T_ZOOM + 0.7)) * (1 - ease.inOut(seg(t, T_CARD, T_CARD + 0.6)));
+  ctx.save();
+  ctx.translate(noise1(t * 6, 1) * shake, noise1(t * 6, 2) * shake);
+  // ヘッダーの番号 (480,170) を画面中央上寄り (540,560) へ寄せる
+  const S = 1 + z * 0.9;
+  ctx.translate(lerp(0, 540 - 480 * S, z), lerp(0, 560 - 170 * S, z)); ctx.scale(S, S);
+  drawChat(ctx, t);
+  drawHeader(ctx, t, t > T_MATCH && t < T_END);
+  drawInput(ctx, t);
+  ctx.restore();
+  drawProfileCard(ctx, t);
+  // 不穏な赤いビネット
+  const v = seg(t, 12, 25) * 0.55 + (t > T_MATCH ? 0.25 : 0);
+  const g = ctx.createRadialGradient(W / 2, H / 2, H * 0.3, W / 2, H / 2, H * 0.75);
+  g.addColorStop(0, 'rgba(120,0,10,0)'); g.addColorStop(1, `rgba(120,0,10,${v})`);
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  // グリッチ
+  if (t > T_GLITCH && t < T_GLITCH + 0.5) {
+    const r = MG.rng(Math.floor(t * 30));
+    for (let i = 0; i < 14; i++) {
+      const y = r() * H, h = 10 + r() * 80;
+      ctx.drawImage(ctx.canvas, 0, y, W, h, (r() - 0.5) * 120, y, W, h);
+    }
+    ctx.fillStyle = 'rgba(255,40,60,0.15)'; ctx.fillRect(0, 0, W, H);
+  }
+  drawHook(ctx, t);
+  drawEnd(ctx, t);
+}
+
+const allText = MSGS.map((m) => m.text).join('') + NUMBER + '今日2:14連絡先に登録されていませんメッセージを入力マイプロフィールあなた電話番号私え、これ私の深夜2時。知らない番号から連絡が来た第1話つづく?▮87%';
+MG.create({
+  duration: DURATION, draw, sfx,
+  fonts: [{ family: 'Noto Sans JP', weight: 400, text: allText }, { family: 'Noto Sans JP', weight: 700, text: allText }],
+});
+</script>
+</body>
+</html>

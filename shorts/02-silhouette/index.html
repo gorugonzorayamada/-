@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>02 シルエット劇「7時42分、3両目」</title>
+<link rel="stylesheet" href="../../node_modules/@fontsource/shippori-mincho/500.css">
+<link rel="stylesheet" href="../../node_modules/@fontsource/shippori-mincho/800.css">
+<link rel="stylesheet" href="../../lib/base.css">
+<script src="../../lib/mg.js"></script>
+</head>
+<body>
+<script>
+const { W, H, seg, ease, lerp, clamp, rrect, noise1, rng } = MG;
+const DURATION = 32;
+// 物語をつなぐ唯一の差し色（彼女の本）
+const BOOK = '#a83246';
+const MINCHO = (w, s) => `${w} ${s}px "Shippori Mincho"`;
+
+// ================= 脚本 =================
+// 各「日」のシーン。sky: 窓の外の空 [上, 下]、rain: 雨
+const DAYS = [
+  { a: 0, b: 6.5, label: '1日目', sky: ['#f7b27a', '#fde3c0'], lines: [[0.4, '毎朝7時42分、3両目。'], [3.2, 'いつも同じ場所に、彼女がいる。']] },
+  { a: 6.5, b: 11, label: '12日目', sky: ['#8fc4e8', '#e7f3fa'], lines: [[7.0, '目が合った、気がした。']] },
+  { a: 11, b: 15.5, label: '30日目', sky: ['#6b7580', '#a9b1b8'], rain: true, lines: [[11.5, '雨の日は、少しだけ近くなる。']] },
+  { a: 15.5, b: 22.6, label: '31日目', sky: ['#f39a6b', '#ffd9a8'], lines: [[16.0, 'その日、電車が大きく揺れた。'], [19.2, '——手が、触れそうになった。']] },
+  { a: 22.6, b: 27.2, label: '32日目', sky: ['#9fb4c7', '#e4ebf0'], lines: [[23.2, '次の日、彼女は来なかった。'], [25.4, '残されたのは、一冊の本。']] },
+];
+const T_LURCH = 17.6, T_DROP = 18.0, T_TUNNEL = [20.8, 22.6], T_BOOK = 27.2, T_NOTE = 28.4, T_END = 30.4;
+const NOTE = ['明日の朝、', '終点で待っています。'];
+
+// ================= 効果音 =================
+const sfx = [
+  { t: 0, type: 'train', dur: T_BOOK + 0.5, vol: 0.9 },
+  { t: 0, type: 'pad', dur: DURATION, chord: [196, 246.9, 293.7, 370], vol: 0.9 },
+  { t: T_LURCH, type: 'hit', vol: 0.7 }, { t: T_DROP + 0.75, type: 'pop', pitch: 0.4, vol: 0.8 },
+  { t: T_TUNNEL[0] - 0.2, type: 'whoosh', dur: 2.2, vol: 1.3 },
+  { t: T_NOTE, type: 'bell', freq: 784 }, { t: T_NOTE + 0.6, type: 'bell', freq: 988 }, { t: T_END, type: 'bell', freq: 659 },
+];
+DAYS.forEach((d) => sfx.push({ t: d.a + 0.05, type: 'bell', freq: 523, vol: 0.5 }));
+// 雨音
+for (let i = 0, r = rng(9); i < 120; i++) sfx.push({ t: 11 + r() * 4.4 + 0.5, type: 'tick', vol: 0.15 + r() * 0.2 });
+
+// ================= 背景 =================
+const WIN_TOP = 520, WIN_BOT = 1230, FLOOR = 1640;
+const bld = (() => { const r = rng(3), a = []; for (let x = 0; x < 2400; x += 40 + Math.floor(r() * 100)) a.push([x, 120 + r() * 400, 60 + r() * 80]); return a; })();
+
+function dayAt(t) { return DAYS.find((d) => t >= d.a && t < d.b) || DAYS[DAYS.length - 1]; }
+
+function drawOutside(ctx, t, d) {
+  const g = ctx.createLinearGradient(0, WIN_TOP, 0, WIN_BOT);
+  g.addColorStop(0, d.sky[0]); g.addColorStop(1, d.sky[1]);
+  ctx.fillStyle = g; ctx.fillRect(0, WIN_TOP, W, WIN_BOT - WIN_TOP);
+  // 太陽（朝の日だけ）
+  if (!d.rain) { ctx.fillStyle = 'rgba(255,255,240,0.7)'; ctx.beginPath(); ctx.arc(820, WIN_TOP + 200, 70, 0, Math.PI * 2); ctx.fill(); }
+  // 遠景のビル（ゆっくり）と近景の電柱（速く）
+  const speed = t > T_BOOK ? 0 : 1;
+  ctx.fillStyle = d.rain ? 'rgba(60,66,74,0.55)' : 'rgba(90,60,80,0.35)';
+  const off = (t * 60 * speed) % 2400;
+  for (const [x, h, w] of bld) for (const k of [0, 2400]) {
+    const X = x - off + k - 600; if (X > -200 && X < W + 200) ctx.fillRect(X, WIN_BOT - h, w, h);
+  }
+  ctx.fillStyle = d.rain ? 'rgba(40,44,50,0.8)' : 'rgba(60,40,55,0.7)';
+  const off2 = (t * 900 * speed) % 700;
+  for (let k = -1; k < 3; k++) { const X = k * 700 - off2 + 200; ctx.fillRect(X, WIN_TOP, 16, WIN_BOT - WIN_TOP); ctx.fillRect(X - 40, WIN_TOP + 80, 96, 10); }
+  // 雨粒
+  if (d.rain) {
+    const r = rng(Math.floor(t * 12));
+    ctx.strokeStyle = 'rgba(230,240,255,0.5)'; ctx.lineWidth = 3;
+    for (let i = 0; i < 60; i++) { const x = r() * W, y = WIN_TOP + r() * (WIN_BOT - WIN_TOP); ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x - 30, y + 14); ctx.stroke(); }
+  }
+}
+
+function drawInterior(ctx, t) {
+  const INK = '#15131c';
+  ctx.fillStyle = INK;
+  ctx.fillRect(0, 0, W, WIN_TOP); ctx.fillRect(0, WIN_BOT, W, H - WIN_BOT);
+  // 窓枠
+  for (const x of [0, 520, 1060]) ctx.fillRect(x, WIN_TOP, 26, WIN_BOT - WIN_TOP);
+  ctx.fillRect(0, WIN_BOT - 20, W, 20);
+  // 網棚とつり革
+  ctx.fillRect(0, 420, W, 14);
+  for (let i = 0; i < 7; i++) {
+    const x = 90 + i * 150, sw = noise1(t * 1.3 + i * 0.7, 5) * 0.12 + (t > T_LURCH && t < T_LURCH + 1.5 ? Math.sin((t - T_LURCH) * 9) * 0.3 * (1 - seg(t, T_LURCH, T_LURCH + 1.5)) : 0);
+    ctx.save(); ctx.translate(x, 434); ctx.rotate(sw);
+    ctx.fillRect(-5, 0, 10, 110);
+    ctx.lineWidth = 10; ctx.strokeStyle = INK; ctx.beginPath(); ctx.arc(0, 140, 30, 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
+  }
+  // 座席の背もたれ（窓の下）
+  ctx.fillStyle = '#1d1a26'; rrect(ctx, 40, WIN_BOT + 30, W - 80, 140, 30); ctx.fill();
+  ctx.fillStyle = '#0d0c12'; ctx.fillRect(0, FLOOR, W, H - FLOOR);
+}
+
+// ================= 人物シルエット =================
+// o: {x, lean, look(-1..1), hair:'short'|'long', armL, armR（肩から下向き=0のラジアン）, book, s}
+function person(ctx, o) {
+  const s = o.s || 1, INK = '#0b0a10';
+  ctx.save();
+  ctx.translate(o.x, FLOOR); ctx.rotate(o.lean || 0); ctx.scale(s, s);
+  ctx.fillStyle = INK; ctx.strokeStyle = INK; ctx.lineCap = 'round';
+  // 脚
+  rrect(ctx, -52, -420, 44, 420, 20); ctx.fill(); rrect(ctx, 8, -420, 44, 420, 20); ctx.fill();
+  // コート
+  ctx.beginPath(); ctx.moveTo(-70, -800); ctx.lineTo(70, -800); ctx.lineTo(92, -380); ctx.lineTo(-92, -380); ctx.closePath(); ctx.fill();
+  rrect(ctx, -85, -830, 170, 120, 60); ctx.fill();
+  // 腕
+  ctx.lineWidth = 42;
+  for (const [side, ang] of [[-1, o.armL || 0.08], [1, o.armR || 0.08]]) {
+    const sx = side * 72, sy = -790, len = 330;
+    const hx = sx + Math.sin(ang) * len * side, hy = sy + Math.cos(ang) * len;
+    ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(hx, hy); ctx.stroke();
+  }
+  // 首と頭（look で横顔の向き）
+  ctx.fillRect(-20, -880, 40, 60);
+  const lk = o.look || 0;
+  ctx.save(); ctx.translate(lk * 8, -950);
+  if (o.hair === 'long') { rrect(ctx, -80, -30, 160, 190, 60); ctx.fill(); }
+  ctx.beginPath(); ctx.ellipse(0, 0, 70, 84, 0, 0, Math.PI * 2); ctx.fill();
+  if (Math.abs(lk) > 0.05) { // 鼻
+    ctx.beginPath(); ctx.moveTo(66 * Math.sign(lk), -10); ctx.lineTo((66 + 22 * Math.abs(lk)) * Math.sign(lk), 16); ctx.lineTo(60 * Math.sign(lk), 26); ctx.fill();
+  }
+  ctx.restore();
+  if (o.book) { ctx.fillStyle = BOOK; ctx.fillRect(-64, -700, 128, 100); }
+  ctx.restore();
+}
+
+// 登場人物の動き（時刻 → ポーズ）
+function boy(t) {
+  const p = { hair: 'short', s: 0.78, armR: 0.08, armL: 0.08, look: 0 };
+  if (t < 6.5) { p.x = 230; p.armL = Math.PI * 0.93; }
+  else if (t < 11) { p.x = 300; p.armL = Math.PI * 0.93; p.look = seg(t, 7.3, 7.6) - seg(t, 8.4, 8.7); }
+  else if (t < 15.5) { p.x = 410; p.armL = Math.PI * 0.93; p.look = 0.4 * seg(t, 13, 13.5); }
+  else if (t < T_TUNNEL[1]) {
+    p.x = 430; p.armL = Math.PI * 0.93;
+    p.look = seg(t, T_LURCH, T_LURCH + 0.2);
+    // 本に手を伸ばす
+    const r = ease.inOut(seg(t, 18.6, 19.6));
+    p.lean = 0.22 * r; p.armR = lerp(0.08, 0.9, r);
+  } else { p.x = 430; p.armL = Math.PI * 0.93; p.look = 0.3; p.book = t > 25.2; p.armR = p.book ? 0.5 : 0.08; }
+  return p;
+}
+function girl(t) {
+  const p = { hair: 'long', s: 0.7, armR: 0.3, armL: 0.3, book: true, look: 0 };
+  if (t < 6.5) p.x = 850;
+  else if (t < 11) { p.x = 800; p.look = -(seg(t, 9.0, 9.3) - seg(t, 10.0, 10.3)); }
+  else if (t < 15.5) { p.x = 650; p.book = false; p.armR = Math.PI * 0.93; p.armL = 0.08; p.look = -0.4 * seg(t, 13.6, 14.1); }
+  else {
+    // 揺れでよろめいて本を落とし、拾おうとかがむ
+    const st = ease.outBack(seg(t, T_LURCH, T_LURCH + 0.5));
+    p.x = lerp(700, 640, st); p.lean = -0.18 * st * (1 - seg(t, 18.2, 18.8)); p.look = -seg(t, T_LURCH, T_LURCH + 0.3);
+    p.book = t < T_DROP; p.armR = 0.3; p.armL = t < T_DROP ? 0.3 : 0.08;
+    const r = ease.inOut(seg(t, 18.7, 19.7));
+    p.lean += -0.22 * r; p.armL = lerp(p.armL, 0.9, r);
+  }
+  return p;
+}
+
+// 落ちる本
+function droppedBook(ctx, t) {
+  if (t < T_DROP || t > T_TUNNEL[1]) return;
+  const p = seg(t, T_DROP, T_DROP + 0.75);
+  const x = lerp(590, 520, p), y = lerp(FLOOR - 480, FLOOR - 16, ease.inQuad(p)), r = p * 4.2;
+  ctx.save(); ctx.translate(x, y); ctx.rotate(r); ctx.fillStyle = BOOK; ctx.fillRect(-45, -16, 90, 32); ctx.restore();
+}
+
+// 手が触れそうな瞬間の光
+function glow(ctx, t) {
+  const a = seg(t, 19.2, 19.9) * (1 - seg(t, 20.5, 20.8));
+  if (a <= 0) return;
+  const g = ctx.createRadialGradient(520, FLOOR - 180, 0, 520, FLOOR - 180, 420);
+  g.addColorStop(0, `rgba(255,200,140,${0.55 * a})`); g.addColorStop(1, 'rgba(255,200,140,0)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+}
+
+function tunnel(ctx, t) {
+  const a = Math.min(seg(t, T_TUNNEL[0], T_TUNNEL[0] + 0.15), 1 - seg(t, T_TUNNEL[1] - 0.3, T_TUNNEL[1]));
+  if (a <= 0) return;
+  ctx.fillStyle = `rgba(5,4,8,${a})`; ctx.fillRect(0, 0, W, H);
+  // 流れていくトンネル照明
+  const off = (t * 2600) % 540;
+  ctx.fillStyle = `rgba(255,170,90,${0.8 * a})`;
+  for (let k = -1; k < 3; k++) { const x = k * 540 - off + 540; ctx.fillRect(x, 700, 180, 12); }
+}
+
+// ================= 文字 =================
+function caption(ctx, text, y, a, size = 64) {
+  if (a <= 0) return;
+  ctx.globalAlpha = a; ctx.textAlign = 'center'; ctx.font = MINCHO(500, size);
+  ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillText(text, W / 2 + 3, y + 3);
+  ctx.fillStyle = '#fff'; ctx.fillText(text, W / 2, y);
+  ctx.textAlign = 'left'; ctx.globalAlpha = 1;
+}
+
+function drawText(ctx, t, d) {
+  // 日付ラベル
+  const la = Math.min(seg(t, d.a + 0.1, d.a + 0.6), 1 - seg(t, d.b - 0.5, d.b - 0.1));
+  if (t < T_BOOK) {
+    ctx.globalAlpha = la; ctx.fillStyle = '#fff'; ctx.font = MINCHO(800, 92); ctx.textAlign = 'center';
+    ctx.fillText(d.label, W / 2, 260);
+    ctx.font = MINCHO(500, 34); ctx.fillStyle = '#b9b4c8'; ctx.fillText('7:42　3両目', W / 2, 330);
+    ctx.textAlign = 'left'; ctx.globalAlpha = 1;
+  }
+  // モノローグ（次の行が出るまで表示）
+  d.lines.forEach(([ts, s], i) => {
+    const next = i + 1 < d.lines.length ? d.lines[i + 1][0] : d.b;
+    caption(ctx, s, 1440, Math.min(seg(t, ts, ts + 0.5), 1 - seg(t, next - 0.4, next)));
+  });
+}
+
+// ================= 本のアップとラスト =================
+function bookScene(ctx, t) {
+  const a = seg(t, T_BOOK, T_BOOK + 0.8);
+  if (a <= 0) return;
+  ctx.fillStyle = `rgba(20,18,26,${a})`; ctx.fillRect(0, 0, W, H);
+  ctx.globalAlpha = a;
+  // 本
+  ctx.save(); ctx.translate(W / 2, 960); ctx.rotate(-0.06);
+  ctx.fillStyle = BOOK; rrect(ctx, -300, -400, 600, 800, 16); ctx.fill();
+  ctx.fillStyle = '#4d1f29'; ctx.fillRect(-300, -400, 40, 800);
+  ctx.strokeStyle = '#d9b77a'; ctx.lineWidth = 3; ctx.strokeRect(-220, -320, 460, 640);
+  // しおり（メモ）がすべり出る
+  const n = ease.outCubic(seg(t, T_NOTE, T_NOTE + 1.0));
+  const ny = lerp(-300, -620, n);
+  ctx.fillStyle = '#f4ecd8'; ctx.fillRect(10, ny, 240, 600);
+  ctx.fillStyle = '#3b3140'; ctx.font = MINCHO(500, 50);
+  // 縦書き
+  NOTE.forEach((line, col) => [...line].forEach((ch, i) => {
+    ctx.globalAlpha = a * seg(t, T_NOTE + 0.6 + (col * 6 + i) * 0.07, T_NOTE + 0.9 + (col * 6 + i) * 0.07);
+    ctx.fillText(ch, 160 - col * 90, ny + 80 + i * 54);
+  }));
+  ctx.restore();
+  ctx.globalAlpha = 1;
+  const e = seg(t, T_END, T_END + 0.6);
+  caption(ctx, 'つづく', 1640, e, 60);
+  ctx.globalAlpha = e; ctx.textAlign = 'center'; ctx.font = MINCHO(500, 36); ctx.fillStyle = '#b9b4c8';
+  ctx.fillText('第1話「7時42分、3両目」', W / 2, 1720); ctx.textAlign = 'left'; ctx.globalAlpha = 1;
+}
+
+function draw(ctx, t) {
+  const d = dayAt(t);
+  ctx.save();
+  // 車両のゆれ（揺れの瞬間は大きく）
+  const jolt = t > T_LURCH && t < T_LURCH + 0.8 ? (1 - seg(t, T_LURCH, T_LURCH + 0.8)) * 26 : 0;
+  ctx.translate(noise1(t * 2, 1) * 3 + Math.sin(t * 40) * jolt, noise1(t * 2.3, 2) * 4);
+  drawOutside(ctx, t, d);
+  drawInterior(ctx, t);
+  if (t < T_TUNNEL[1] - 0.3 || t > T_TUNNEL[1]) {
+    person(ctx, boy(t));
+    if (t < T_TUNNEL[1]) person(ctx, girl(t));
+  }
+  droppedBook(ctx, t);
+  ctx.restore();
+  glow(ctx, t);
+  tunnel(ctx, t);
+  // 日と日の間は暗転
+  for (const dd of DAYS.slice(1)) {
+    const k = 1 - Math.abs(t - dd.a) / 0.35;
+    if (k > 0 && dd.a !== T_TUNNEL[1]) { ctx.fillStyle = `rgba(0,0,0,${k})`; ctx.fillRect(0, 0, W, H); }
+  }
+  drawText(ctx, t, d);
+  bookScene(ctx, t);
+}
+
+const allText = DAYS.map((d) => d.label + d.lines.map((l) => l[1]).join('')).join('') + NOTE.join('') + '7:42　3両目つづく第1話「7時42分、3両目」';
+MG.create({
+  duration: DURATION, draw, sfx,
+  fonts: [{ family: 'Shippori Mincho', weight: 500, text: allText }, { family: 'Shippori Mincho', weight: 800, text: allText }],
+});
+</script>
+</body>
+</html>
