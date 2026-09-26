@@ -2,7 +2,7 @@
 
 ## 不思議な物語への招待状（1話完結シリーズ）
 
-完成動画は [`AIショートショート/`](AIショートショート/) にあります。各話のソースは `stories/` です。
+完成動画は [`不思議な物語/`](不思議な物語/) にあります。各話のソースは `stories/` です。
 
 | # | タイトル | 表現 |
 |---|---|---|
@@ -17,7 +17,7 @@
 ```sh
 pip install pyopenjtalk-plus imageio-ffmpeg   # ナレーションと書き出し
 bash scripts/setup-voicevox.sh                 # VOICEVOX を入れて起動（あれば自動で使われる）
-node scripts/render.mjs stories/01-reply --out AIショートショート
+node scripts/render.mjs stories/01-reply --out 不思議な物語
 node scripts/render.mjs stories/01-reply --yomi   # ナレーションの読みだけ確認
 ```
 

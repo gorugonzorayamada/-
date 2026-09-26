@@ -1,4 +1,4 @@
-# 不思議な物語への招待状（保存フォルダ: AIショートショート）
+# 不思議な物語への招待状
 
 星新一のショートショートや、「世にも奇妙な物語」「ミステリーゾーン」のようなどんでん返しの名作を参考にした、縦型ショート動画シリーズです。
 どの動画も 1080×1920・30fps・約1分です。ナレーション、BGM、効果音（ステレオ）が入っています。
@@ -37,7 +37,7 @@
 npm install
 pip install pyopenjtalk-plus imageio-ffmpeg
 bash scripts/setup-voicevox.sh        # VOICEVOX エンジンを入れて起動（初回のみダウンロード）
-node scripts/render.mjs stories/01-reply --out AIショートショート   # 1話だけ
+node scripts/render.mjs stories/01-reply --out 不思議な物語   # 1話だけ
 node scripts/render.mjs stories/01-reply --yomi                    # 読みの確認だけ
 ```
 台本（ナレーション、読み、タイミング）は `stories/<話>/index.html` の先頭にまとまっています。

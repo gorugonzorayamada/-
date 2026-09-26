@@ -1,5 +1,5 @@
 // 使い方: node scripts/render.mjs <作品フォルダ...> [--out <出力フォルダ>] [--yomi]
-//   例: node scripts/render.mjs stories/01-reply --out AIショートショート
+//   例: node scripts/render.mjs stories/01-reply --out 不思議な物語
 //   引数なしなら shorts/ と stories/ 以下をすべて書き出す。
 //   --yomi を付けると、ナレーションの読み（カナ）を表示するだけで動画は作らない。
 import { chromium } from 'playwright';
