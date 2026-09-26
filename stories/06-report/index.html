@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>第6話「第三惑星調査報告」</title>
+<link rel="stylesheet" href="../../node_modules/@fontsource/shippori-mincho/500.css">
+<link rel="stylesheet" href="../../node_modules/@fontsource/shippori-mincho/800.css">
+<link rel="stylesheet" href="../../node_modules/@fontsource/noto-sans-jp/400.css">
+<link rel="stylesheet" href="../../node_modules/@fontsource/noto-sans-jp/700.css">
+<link rel="stylesheet" href="../../lib/base.css">
+<script src="../../lib/mg.js"></script>
+<script src="../../lib/series.js"></script>
+</head>
+<body>
+<script>
+const { W, H, seg, ease, lerp, clamp, rrect, noise1, kf, rng } = MG;
+const NO = 6, TITLE = '第三惑星調査報告', DURATION = 52.5;
+const F = (w, s) => `${w} ${s}px "Noto Sans JP"`;
+
+// ================= 脚本 =================
+// 宇宙人の報告書。読み上げと同時に画面上部へタイプされる
+const NARR = S.lines([
+  [0.3, '第三惑星、調査報告。', 'alien', 'だいさんわくせい、ちょうさほうこく。'],
+  [3.2, '観察一。住民は一日中、\n光る板に頭を下げている。', 'alien', 'かんさつ、いち。じゅうみんは、いちにちじゅう、ひかるいたに、あたまをさげている。'],
+  [10.4, '観察二。夜になると、\n住民は板に食事を与える。', 'alien', 'かんさつ、に。よるになると、じゅうみんは、いたに、しょくじをあたえる。'],
+  [16.9, '観察三。板が鳴くと、\n住民は命令どおりに動く。', 'alien', 'かんさつ、さん。いたがなくと、じゅうみんは、めいれいどおりにうごく。'],
+  [23.0, '結論。\nこの星の支配者は、板である。', 'alien', 'けつろん。このほしの、しはいしゃは、いたである。'],
+  [27.6, '我々は、支配者に\nあいさつを送った。', 'alien', 'われわれは、しはいしゃに、あいさつをおくった。'],
+  [39.8, '追記。板の命令で、\n住民は初めて上を向いた。', 'alien', 'ついき。いたのめいれいで、じゅうみんは、はじめて、うえをむいた。'],
+  [45.8, '支配者であることを、確認。', 'alien', 'しはいしゃであることを、かくにん。'],
+]);
+NARR.forEach((l) => { l.noCaption = true; });
+const T = { f1: 3.2, f2: 10.2, f3: 16.7, stamp1: 25.6, send: 27.6, phone: 29.6, look: 32.0, sky: [33.6, 37.0], stamp2: 47.8, end: 49.6 };
+
+// ================= 効果音・BGM =================
+const sfx = [
+  { t: 0, type: 'music', dur: 27.6, bpm: 64, chords: [[50, 57, 62], [48, 55, 60], [46, 53, 58], [45, 52, 57]], pattern: 'sparse', timbre: 'synth', padVol: 1.0, vol: 0.5, stopAt: 27.4 },
+  { t: T.stamp1, type: 'stamp', vol: 1 }, { t: T.stamp2, type: 'stamp', vol: 1 },
+  { t: T.send, type: 'whoosh', dur: 1.8, vol: 0.9 },
+  { t: T.look, type: 'music', dur: 20.5, bpm: 84, beats: 3, chords: [[60, 64, 67], [57, 60, 64], [53, 57, 60], [55, 59, 62]], pattern: 'waltz', timbre: 'box', padVol: 0.6, vol: 1.1 },
+];
+// 報告書をタイプする音
+for (const l of NARR) for (let i = 0; i < l.text.length - 1; i += 2) sfx.push({ t: l.t + i * 0.1, type: 'tick', vol: 0.25 });
+// 観察三: 板がいっせいに鳴る
+for (let i = 0; i < 8; i++) sfx.push({ t: T.f3 + 1.4 + i * 0.07, type: 'ping', vol: 0.35, pitch: 0.9 + (i % 3) * 0.1 });
+// あいさつ: 世界中の板が鳴る
+for (let i = 0; i < 16; i++) sfx.push({ t: T.phone + i * 0.05, type: 'ping', vol: 0.3, pitch: 0.8 + (i % 4) * 0.12 });
+
+// ================= 人々 =================
+const INK = '#0c0b12';
+// 小さな人物: bow=うつむき(0..1), up=見上げる(0..1), glow=板の光, walk=歩行位相
+function human(ctx, x, y, s, o, t) {
+  ctx.save(); ctx.translate(x, y); ctx.scale(s, s);
+  ctx.fillStyle = INK; ctx.strokeStyle = INK; ctx.lineCap = 'round';
+  const w = o.walk ?? null, sw = w === null ? 0 : Math.sin(w) * 0.35;
+  for (const [side, a] of [[-1, sw], [1, -sw]]) { ctx.save(); ctx.translate(side * 22, -380); ctx.rotate(a); rrect(ctx, -20, 0, 40, 380, 18); ctx.fill(); ctx.restore(); }
+  const bob = (o.laugh || 0) * Math.abs(Math.sin(t * 14)) * 10;
+  ctx.translate(0, -bob);
+  ctx.beginPath(); ctx.moveTo(-62, -730); ctx.lineTo(62, -730); ctx.lineTo(78, -360); ctx.lineTo(-78, -360); ctx.fill();
+  rrect(ctx, -74, -760, 148, 110, 55); ctx.fill();
+  // 頭: うつむくと前に下がり、見上げると後ろに反る
+  const bow = o.bow || 0, up = o.up || 0;
+  ctx.save(); ctx.translate(0, -800 + bow * 40 - up * 10); ctx.rotate(-up * 0.4);
+  ctx.fillRect(-16, 0, 32, 50);
+  ctx.beginPath(); ctx.ellipse(0, -60 + bow * 10, 62, 74, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+  // 腕と板
+  ctx.lineWidth = 36;
+  const hold = o.glow > 0 ? 1 - up : 0;
+  for (const side of [-1, 1]) {
+    ctx.beginPath(); ctx.moveTo(side * 62, -710);
+    if (hold > 0.1) { ctx.lineTo(side * 40, -560); ctx.lineTo(0, -600 + (1 - hold) * 200); } else ctx.lineTo(side * 80, -420);
+    ctx.stroke();
+  }
+  if (o.glow > 0 && hold > 0.1) {
+    const gx = 0, gy = -610;
+    const g = ctx.createRadialGradient(gx, gy - 120, 10, gx, gy - 120, 260);
+    g.addColorStop(0, `rgba(160,220,255,${0.45 * o.glow * hold})`); g.addColorStop(1, 'rgba(160,220,255,0)');
+    ctx.fillStyle = g; ctx.fillRect(-260, -900, 520, 560);
+    ctx.fillStyle = `rgba(200,240,255,${o.glow * hold})`; rrect(ctx, -34, gy - 30, 68, 110, 10); ctx.fill();
+    if (o.buzz) { ctx.strokeStyle = `rgba(200,240,255,${o.buzz})`; ctx.lineWidth = 5; for (const s2 of [-1, 1]) { ctx.beginPath(); ctx.moveTo(s2 * 50, gy - 20); ctx.lineTo(s2 * 70, gy + 10); ctx.lineTo(s2 * 50, gy + 40); ctx.stroke(); } }
+  }
+  ctx.restore();
+}
+
+// 群衆の配置 [x, y(足元), 大きさ, 歩く向き]
+const CROWD = (() => { const r = rng(21), a = []; for (let i = 0; i < 11; i++) a.push({ x: 60 + i * 96 + r() * 40, y: i % 2 ? 1400 : 1500, s: i % 2 ? 0.48 : 0.58, dir: r() > 0.5 ? 1 : -1, ph: r() * 6, lag: r() }); return a; })();
+
+function street(ctx, t, night) {
+  const g = ctx.createLinearGradient(0, 0, 0, 1500);
+  if (night) { g.addColorStop(0, '#060818'); g.addColorStop(1, '#1b2340'); } else { g.addColorStop(0, '#9fb7c9'); g.addColorStop(1, '#d9dfe2'); }
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  // ビル
+  const r = rng(8);
+  for (let x = -40; x < W; x += 140 + r() * 60) {
+    const h = 380 + r() * 420;
+    ctx.fillStyle = night ? '#0f1428' : '#7d8c99'; ctx.fillRect(x, 1250 - h, 150, h);
+    for (let yy = 1250 - h + 40; yy < 1200; yy += 70) for (let xx = x + 20; xx < x + 130; xx += 45) {
+      if (r() > 0.45) { ctx.fillStyle = night ? 'rgba(255,214,140,0.7)' : 'rgba(255,255,255,0.35)'; ctx.fillRect(xx, yy, 24, 36); }
+    }
+  }
+  ctx.fillStyle = night ? '#141a30' : '#a4aeb6'; ctx.fillRect(0, 1250, W, H - 1250);
+  ctx.fillStyle = night ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.3)'; for (let x = 0; x < W; x += 160) ctx.fillRect(x, 1560, 90, 20);
+}
+
+// 観察二: 夜、枕元で板に「食事」を与える
+function bedroom(ctx, t) {
+  ctx.fillStyle = '#070912'; ctx.fillRect(0, 0, W, H);
+  // 窓と月
+  ctx.fillStyle = '#18204a'; ctx.fillRect(560, 380, 380, 460); ctx.fillStyle = '#e8e4c8'; ctx.beginPath(); ctx.arc(820, 500, 50, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#070912'; ctx.fillRect(740, 380, 14, 460); ctx.fillRect(560, 600, 380, 14);
+  // ベッドと眠る人
+  ctx.fillStyle = 'rgba(200,210,255,0.08)'; ctx.beginPath(); ctx.moveTo(560, 840); ctx.lineTo(940, 840); ctx.lineTo(1080, 1500); ctx.lineTo(300, 1500); ctx.fill();
+  ctx.fillStyle = '#232a44'; ctx.fillRect(120, 1180, 840, 160);
+  ctx.fillStyle = '#2d3558'; ctx.beginPath(); ctx.ellipse(230, 1120, 80, 60, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(560, 1150, 360, 70, 0, 0, Math.PI * 2); ctx.fill();
+  // 腕を伸ばして板にケーブルをつなぐ
+  const reach = ease.inOut(seg(t, T.f2 + 0.8, T.f2 + 2.2));
+  ctx.strokeStyle = INK; ctx.lineWidth = 34; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(280, 1130); ctx.lineTo(lerp(250, 120, reach), lerp(1150, 1060, reach)); ctx.stroke();
+  // 台と板
+  ctx.fillStyle = '#1a1f33'; ctx.fillRect(20, 1080, 170, 260);
+  const charge = seg(t, T.f2 + 2.2, T.f2 + 5.5);
+  ctx.fillStyle = 'rgba(160,220,255,0.95)'; rrect(ctx, 60, 1010, 90, 60, 10); ctx.fill();
+  const g = ctx.createRadialGradient(105, 1040, 5, 105, 1040, 300); g.addColorStop(0, 'rgba(160,220,255,0.35)'); g.addColorStop(1, 'rgba(160,220,255,0)'); ctx.fillStyle = g; ctx.fillRect(-200, 740, 600, 600);
+  // ケーブル
+  if (reach > 0.9) { ctx.strokeStyle = '#2a3150'; ctx.lineWidth = 8; ctx.beginPath(); ctx.moveTo(150, 1040); ctx.quadraticCurveTo(200, 1300, 40, 1400); ctx.stroke(); }
+  // 充電表示（食事）
+  ctx.fillStyle = '#0c0b12'; ctx.fillRect(75, 1025, 60, 30); ctx.fillStyle = '#7cffb2'; ctx.fillRect(78, 1028, 54 * charge, 24);
+}
+
+// ================= 報告書 =================
+function report(ctx, t) {
+  ctx.save();
+  // 人々が空を見上げる間だけ、報告書を消して星空を見せる
+  ctx.globalAlpha = 1 - seg(t, T.look + 0.5, T.look + 1.5) + seg(t, 39.2, 39.8);
+  ctx.fillStyle = 'rgba(4,14,10,0.86)'; rrect(ctx, 40, 150, W - 80, 560, 26); ctx.fill();
+  ctx.strokeStyle = 'rgba(124,255,178,0.5)'; ctx.lineWidth = 3; rrect(ctx, 40, 150, W - 80, 560, 26); ctx.stroke();
+  ctx.fillStyle = 'rgba(124,255,178,0.7)'; ctx.font = F(400, 28); ctx.fillText('観測記録　第七調査船', 80, 205);
+  ctx.fillStyle = '#ff5c6c'; ctx.beginPath(); ctx.arc(W - 100, 196, 10 * (0.6 + 0.4 * Math.sin(t * 6)), 0, Math.PI * 2); ctx.fill();
+  // 読み上げに合わせて一文字ずつ打たれる
+  ctx.font = F(700, 46); ctx.fillStyle = '#7cffb2';
+  const shown = [];
+  for (const l of NARR) {
+    if (t < l.t) break;
+    const n = [...l.text], k = Math.min(n.length, Math.ceil(n.length * clamp((t - l.t) / (l.dur * 0.9))));
+    for (const s of MG.wrap(ctx, n.slice(0, k).join(''), W - 180)) shown.push(s);
+    if (l.text.startsWith('結論') || l.text.startsWith('我々')) {} // そのまま
+  }
+  const lines = shown.slice(-7);
+  lines.forEach((s, i) => ctx.fillText(s, 80, 280 + i * 62));
+  // カーソル
+  if (Math.floor(t * 2.5) % 2 === 0 && lines.length) { const w = ctx.measureText(lines[lines.length - 1]).width; ctx.fillRect(84 + w, 244 + (lines.length - 1) * 62, 22, 44); }
+  ctx.restore();
+}
+
+function stamp(ctx, t, t0, text, x, y, t1 = 1e9) {
+  const p = seg(t, t0, t0 + 0.25);
+  if (p <= 0 || t > t1) return;
+  const s = lerp(2.2, 1, ease.outCubic(p));
+  ctx.save(); ctx.translate(x, y); ctx.rotate(-0.18); ctx.scale(s, s); ctx.globalAlpha = Math.min(1, p * 2);
+  ctx.strokeStyle = '#e8384f'; ctx.lineWidth = 10; ctx.beginPath(); ctx.arc(0, 0, 110, 0, Math.PI * 2); ctx.stroke();
+  ctx.fillStyle = '#e8384f'; ctx.font = S.MIN(800, 84); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(text, 0, 4);
+  ctx.restore();
+}
+
+// 板に届いたメッセージ（大写し）
+function phoneClose(ctx, t) {
+  const a = Math.min(seg(t, T.phone, T.phone + 0.4), 1 - seg(t, T.look - 0.3, T.look + 0.2));
+  if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha = a;
+  ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(0, 0, W, H);
+  ctx.translate(W / 2, 1150);
+  ctx.fillStyle = INK; rrect(ctx, -240, -330, 480, 760, 60); ctx.fill();
+  ctx.fillStyle = '#dff3ff'; rrect(ctx, -210, -300, 420, 700, 40); ctx.fill();
+  ctx.fillStyle = '#fff'; rrect(ctx, -180, -220, 360, 250, 30); ctx.fill();
+  ctx.fillStyle = '#6a7a8c'; ctx.font = F(700, 26); ctx.fillText('差出人不明', -150, -170);
+  ctx.fillStyle = '#1b2433'; ctx.font = F(700, 40); ctx.fillText('はじめまして。', -150, -100); ctx.fillText('上を見てください。', -150, -40);
+  // 手
+  ctx.fillStyle = INK; rrect(ctx, -290, 200, 120, 300, 60); ctx.fill(); rrect(ctx, 170, 180, 120, 320, 60); ctx.fill();
+  ctx.restore();
+}
+
+// 星空
+function sky(ctx, t, k) {
+  const r = rng(33);
+  for (let i = 0; i < 300; i++) {
+    const x = r() * W, y = r() * 1700 - 500, s = r() * 2.6 + 0.6, tw = 0.6 + 0.4 * Math.sin(t * (1 + r() * 3) + i);
+    ctx.fillStyle = `rgba(255,255,255,${k * tw})`; ctx.beginPath(); ctx.arc(x, y, s, 0, Math.PI * 2); ctx.fill();
+  }
+  // 天の川
+  const g = ctx.createLinearGradient(0, 200, W, 900); g.addColorStop(0, 'rgba(160,140,255,0)'); g.addColorStop(0.5, `rgba(180,170,255,${0.18 * k})`); g.addColorStop(1, 'rgba(160,140,255,0)');
+  ctx.fillStyle = g; ctx.fillRect(0, -500, W, 1750);
+  // 調査船の小さな光
+  const sx = lerp(900, 700, seg(t, T.sky[0], 48)), sy = 520 + Math.sin(t) * 6;
+  ctx.fillStyle = `rgba(124,255,178,${k})`; ctx.beginPath(); ctx.arc(sx, sy, 6, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = `rgba(124,255,178,${0.25 * k})`; ctx.beginPath(); ctx.arc(sx, sy, 18, 0, Math.PI * 2); ctx.fill();
+}
+
+function scene(ctx, t) {
+  const night = t >= T.f2 && t < T.f3 ? 'bed' : t >= T.send ? 'night' : 'day';
+  if (night === 'bed') return bedroom(ctx, t);
+  // 見上げると、カメラが空へ向かう
+  const tilt = ease.inOut(seg(t, T.sky[0], T.sky[1]));
+  if (night === 'night') { ctx.fillStyle = '#060818'; ctx.fillRect(0, 0, W, H); }
+  ctx.save(); ctx.translate(0, tilt * 420);
+  street(ctx, t, night === 'night');
+  if (night === 'night') sky(ctx, t, seg(t, T.look, T.sky[1]));
+  CROWD.forEach((p, i) => {
+    let x = p.x, walk = null, bow = 1, up = 0, laugh = 0, buzz = 0;
+    if (t < T.f2) { walk = t * 5 + p.ph; x = ((p.x + p.dir * t * 60) % (W + 200) + W + 200) % (W + 200) - 100; }
+    if (t >= T.f3 && t < T.send) {
+      // 観察三: 板が鳴ると、いっせいに見て、笑って、歩き出す
+      buzz = seg(t, T.f3 + 1.4, T.f3 + 1.6) * (1 - seg(t, T.f3 + 2.4, T.f3 + 2.6));
+      bow = t < T.f3 + 1.5 ? 0.2 : 1;
+      laugh = t > T.f3 + 2.6 && t < T.f3 + 3.8 ? 1 : 0;
+      if (t > T.f3 + 3.8) { walk = t * 5 + p.ph; x = p.x + (t - T.f3 - 3.8) * 90 * p.dir; }
+    }
+    if (t >= T.look) up = ease.inOut(seg(t, T.look + p.lag * 1.4, T.look + p.lag * 1.4 + 0.8));
+    human(ctx, x, p.y, p.s, { walk, bow: bow * (1 - up), up, glow: 1, laugh, buzz }, t);
+  });
+  // あいさつの電波
+  if (t > T.send && t < T.phone + 0.5) {
+    const p = seg(t, T.send, T.phone + 0.5);
+    ctx.strokeStyle = `rgba(124,255,178,${1 - p})`; ctx.lineWidth = 6;
+    for (let k = 0; k < 3; k++) { ctx.beginPath(); ctx.arc(W / 2, -200, 300 + (p + k * 0.3) * 1500, 0, Math.PI * 2); ctx.stroke(); }
+  }
+  ctx.restore();
+}
+
+function draw(ctx, t) {
+  scene(ctx, t);
+  phoneClose(ctx, t);
+  // 監視映像の枠
+  ctx.save(); ctx.strokeStyle = 'rgba(124,255,178,0.35)'; ctx.lineWidth = 4;
+  for (const [x, y, sx, sy] of [[40, 760, 1, 1], [W - 40, 760, -1, 1], [40, 1620, 1, -1], [W - 40, 1620, -1, -1]]) { ctx.beginPath(); ctx.moveTo(x, y + sy * 70); ctx.lineTo(x, y); ctx.lineTo(x + sx * 70, y); ctx.stroke(); }
+  ctx.fillStyle = 'rgba(0,0,0,0.08)'; for (let y = 0; y < H; y += 6) ctx.fillRect(0, y, W, 2);
+  ctx.restore();
+  report(ctx, t);
+  stamp(ctx, t, T.stamp1, '結論', 860, 1000, T.send);
+  stamp(ctx, t, T.stamp2, '確認', 860, 1000);
+  S.logo(ctx, t, NO, true, 800);
+  S.endCard(ctx, t, T.end, NO, TITLE);
+}
+
+MG.create({
+  duration: DURATION, draw, sfx, narration: NARR,
+  fonts: S.fonts(S.textOf(NARR, '観測記録　第七調査船結論確認差出人不明はじめまして。上を見てください。'), { sans: true }),
+});
+</script>
+</body>
+</html>

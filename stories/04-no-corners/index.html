@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>第4話「角のない国」</title>
+<link rel="stylesheet" href="../../node_modules/@fontsource/shippori-mincho/500.css">
+<link rel="stylesheet" href="../../node_modules/@fontsource/shippori-mincho/800.css">
+<link rel="stylesheet" href="../../node_modules/@fontsource/zen-maru-gothic/700.css">
+<link rel="stylesheet" href="../../lib/base.css">
+<script src="../../lib/mg.js"></script>
+<script src="../../lib/series.js"></script>
+</head>
+<body>
+<script>
+const { W, H, seg, ease, lerp, clamp, rrect, noise1, kf, rng } = MG;
+const NO = 4, TITLE = '角のない国', DURATION = 51;
+const MARU = (s) => `700 ${s}px "Zen Maru Gothic"`;
+
+// ================= 脚本 =================
+const NARR = S.lines([
+  [0.3, 'しかくの国の王様は、ある日、\n机の角に足の小指をぶつけた。', 'narrator', 'しかくのくにの、おうさまは、あるひ、つくえのかどに、あしのこゆびをぶつけた。'],
+  [6.8, '「角を禁止する」。\n王様は、おふれを出した。', 'narrator', 'かどを、きんしする。おうさまは、おふれをだした。'],
+  [11.0, '国じゅうで、角が削られた。', 'narrator', 'くにじゅうで、かどがけずられた。'],
+  [15.2, '人々は、やさしい国になったと喜んだ。', 'narrator', 'ひとびとは、やさしいくにに、なったと、よろこんだ。'],
+  [19.6, 'ところが。', 'narrator'],
+  [20.6, 'この国は、ほんの少しだけ傾いていた。', 'narrator', 'このくには、ほんのすこしだけ、かたむいていた。'],
+  [24.6, '国じゅうが、坂を転がりはじめた。', 'narrator', 'くにじゅうが、さかを、ころがりはじめた。'],
+  [28.0, '坂の下は、海だった。', 'narrator', 'さかのしたは、うみだった。'],
+  [31.2, 'ただひとつ、削り忘れた古い箱だけが、\n坂の途中に残っていた。', 'narrator', 'ただひとつ、けずりわすれた、ふるいはこだけが、さかのとちゅうに、のこっていた。'],
+  [39.6, '国は、箱の前で止まった。', 'narrator', 'くには、ハコのまえで、とまった。'],
+  [43.0, 'それからこの国では、\n角がひとつだけ、大切にされている。', 'narrator', 'それから、このくにでは、かどが、ひとつだけ、たいせつにされている。'],
+]);
+const T = { bump: 2.6, decree: 6.8, round: [10.8, 14.0], happy: 15.0, roll: 20.8, sea: 27.6, box: 31.0, crown: 44.2, end: 48.4 };
+
+// ================= 世界 =================
+const C = { sky1: '#bfe3f2', sky2: '#fdf1d8', ground: '#8cc084', groundDark: '#6fa46a', sea: '#5aa9d6', seaLight: '#8fcbe8', ink: '#2b2240', box: '#b8864e', boxDark: '#8e6333', king: '#e86a5a', gold: '#f2c14e' };
+// 地面の高さ: はじめはわずかに傾き、途中から坂が急になる
+const gy = (x) => x < 1700 ? 1250 + x * 0.05 : 1335 + (x - 1700) * 0.2;
+const SLOPE = (x) => Math.atan(x < 1700 ? 0.05 : 0.2);
+const SEA_X = 3250, SEA_Y = gy(SEA_X) + 30;
+const BOX = { x: 2550, s: 270 };
+
+// 国の住人たち: kind, x, サイズ, 色
+const THINGS = [
+  { kind: 'house', x: 170, s: 300, c: '#f0a868' }, { kind: 'person', x: 400, s: 130, c: '#7fb3e8' },
+  { kind: 'house', x: 640, s: 320, c: '#e98b8b' }, { kind: 'table', x: 880, s: 190, c: '#a67c52' },
+  { kind: 'king', x: 1050, s: 190, c: C.king }, { kind: 'person', x: 1220, s: 125, c: '#b39ddb' },
+  { kind: 'house', x: 1450, s: 290, c: '#8fd0b4' }, { kind: 'person', x: 1660, s: 120, c: '#f6c177' },
+];
+// 右にいるものから順に箱へたどり着き、箱の左に積み重なる
+(function plan() {
+  const order = THINGS.map((th, i) => i).sort((a, b) => THINGS[b].x - THINGS[a].x);
+  let edge = BOX.x - BOX.s / 2;
+  order.forEach((i, k) => {
+    const th = THINGS[i];
+    th.r = th.s / 2;
+    th.stop = edge - th.r; edge -= th.s;
+    th.ts = T.roll + 0.3 + (THINGS.length - 1 - k) * 0.35 + (k === 0 ? 0 : 0);
+    th.ta = 35.0 + k * 0.5;
+    th.roundAt = T.round[0] + (i % 4) * 0.6;
+  });
+})();
+
+function thingPos(th, t) {
+  let x = th.x, rot = 0, bounce = 0;
+  if (t > th.ts) {
+    const p = seg(t, th.ts, th.ta);
+    x = lerp(th.x, th.stop, Math.pow(p, 1.6));
+    if (t > th.ta) bounce = Math.sin((t - th.ta) * 14) * Math.exp(-(t - th.ta) * 5) * 18;
+    x -= bounce;
+    rot = (x - th.x) / th.r;
+  }
+  return { x, y: gy(x) - th.r, rot };
+}
+
+// ================= 効果音・BGM =================
+const sfx = [
+  { t: 0, type: 'music', dur: 19.4, bpm: 120, chords: [[60, 64, 67], [65, 69, 72], [62, 65, 69], [67, 71, 74]], pattern: 'bounce', timbre: 'marimba', vol: 1.0, stopAt: 19.4, fadeOut: 0.3 },
+  { t: T.bump, type: 'thump', pitch: 1.8 }, { t: T.bump + 0.1, type: 'boing', pitch: 2.2, vol: 0.6 },
+  { t: T.decree, type: 'fanfare', notes: [67, 72, 76, 79], vol: 0.9 },
+  { t: T.round[0], type: 'scrape', dur: 3.2, vol: 1.0 },
+  { t: T.roll, type: 'music', dur: 10.4, bpm: 132, chords: [[57, 60, 64], [53, 57, 60], [55, 59, 62], [52, 56, 59]], pattern: 'pulse', timbre: 'pluck', vol: 0.8, stopAt: 10.2, fadeOut: 0.6 },
+  { t: T.roll, type: 'roll', dur: 15.5, vol: 0.8 },
+  { t: T.sea, type: 'waves', dur: 5, vol: 0.9 },
+  { t: 39.6, type: 'music', dur: 11.4, bpm: 100, chords: [[60, 64, 67], [57, 60, 64], [53, 57, 60], [55, 59, 62]], pattern: 'waltz', beats: 3, timbre: 'box', padVol: 0.5, vol: 1.0 },
+  { t: T.crown + 0.9, type: 'fanfare', notes: [72, 76, 79, 84], vol: 0.8 },
+];
+for (let i = 0; i < 6; i++) sfx.push({ t: T.happy + 0.3 + i * 0.4, type: 'pop', pitch: 1.2 + i * 0.1, vol: 0.4 });
+THINGS.forEach((th) => sfx.push({ t: th.ta, type: 'thump', pitch: 1.2, vol: 0.9 }, { t: th.ta + 0.02, type: 'boing', pitch: 1.4, vol: 0.35 }));
+
+// ================= キャラクター描画 =================
+function eyes(ctx, s, mood, t, seed = 0) {
+  const k = s / 100, blink = (t + seed) % 3.3 < 0.12;
+  for (const side of [-1, 1]) {
+    ctx.save(); ctx.translate(side * 18 * k, -6 * k);
+    ctx.fillStyle = ctx.strokeStyle = C.ink; ctx.lineWidth = 5 * k; ctx.lineCap = 'round';
+    if (mood === 'happy') { ctx.beginPath(); ctx.arc(0, 4 * k, 8 * k, Math.PI * 1.1, Math.PI * 1.9); ctx.stroke(); }
+    else if (mood === 'hurt') { ctx.beginPath(); ctx.moveTo(-7 * k, -7 * k); ctx.lineTo(7 * k, 7 * k); ctx.moveTo(7 * k, -7 * k); ctx.lineTo(-7 * k, 7 * k); ctx.stroke(); }
+    else {
+      const big = mood === 'panic' ? 1.3 : 1;
+      ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.ellipse(0, 0, 10 * k * big, (blink ? 1.5 : 12) * k * big, 0, 0, Math.PI * 2); ctx.fill();
+      if (!blink) { ctx.fillStyle = C.ink; ctx.beginPath(); ctx.arc(0, 2 * k, (mood === 'panic' ? 3.5 : 5.5) * k, 0, Math.PI * 2); ctx.fill(); }
+      if (mood === 'grumpy') { ctx.strokeStyle = C.ink; ctx.lineWidth = 5 * k; ctx.beginPath(); ctx.moveTo(-12 * k * side, -20 * k); ctx.lineTo(12 * k * side, -14 * k); ctx.stroke(); }
+    }
+    ctx.restore();
+  }
+}
+
+function drawThing(ctx, th, t) {
+  const p = thingPos(th, t), s = th.s;
+  const round = ease.inOut(seg(t, th.roundAt, th.roundAt + 1.6));
+  const w = th.kind === 'table' ? lerp(s, s, round) : s, h = th.kind === 'table' ? lerp(s * 0.55, s, round) : s;
+  ctx.save();
+  ctx.translate(p.x, t > th.ts ? p.y : gy(th.x) - h / 2);
+  if (t <= th.ts) ctx.rotate(SLOPE(th.x));
+  ctx.save(); ctx.rotate(p.rot);
+  ctx.fillStyle = th.c; rrect(ctx, -w / 2, -h / 2, w, h, Math.max(2, (Math.min(w, h) / 2) * round)); ctx.fill();
+  // 家の窓・ドア（回転と一緒に回る）
+  if (th.kind === 'house') {
+    ctx.fillStyle = 'rgba(255,255,255,0.75)'; rrect(ctx, -s * 0.3, -s * 0.28, s * 0.22, s * 0.22, 6 + 20 * round); ctx.fill(); rrect(ctx, s * 0.08, -s * 0.28, s * 0.22, s * 0.22, 6 + 20 * round); ctx.fill();
+    ctx.fillStyle = 'rgba(60,40,40,0.45)'; rrect(ctx, -s * 0.1, s * 0.05, s * 0.2, s * 0.38, 8 * round + 3); ctx.fill();
+  }
+  if (th.kind === 'table') { ctx.fillStyle = 'rgba(0,0,0,0.15)'; ctx.fillRect(-w / 2, -h / 2 + h * 0.18, w, 8); }
+  ctx.restore();
+  // 目（転がっても上を向く）。机と家には目がない
+  if (th.kind === 'person' || th.kind === 'king') {
+    let mood = 'normal';
+    if (th.kind === 'king' && t > T.bump && t < T.bump + 2.2) mood = 'hurt';
+    if (t > T.happy && t < 19.6) mood = 'happy';
+    if (t > th.ts + 0.8) mood = 'panic';
+    if (t > th.ta + 0.6) mood = 'normal';
+    if (t > T.crown) mood = 'happy';
+    ctx.save(); ctx.translate(0, -h * 0.05); eyes(ctx, s, mood, t, th.x % 3); ctx.restore();
+  }
+  ctx.restore();
+  // 王冠（王様の頭の上 → 最後に箱へ）
+  if (th.kind === 'king') crown(ctx, t, p.x, (t > th.ts ? p.y : gy(th.x) - h / 2) - h / 2);
+}
+
+function crown(ctx, t, kx, ky) {
+  const bx = BOX.x, byTop = gy(BOX.x) - BOX.s;
+  const f = ease.inOut(seg(t, T.crown, T.crown + 1.2));
+  const x = lerp(kx, bx, f), y = lerp(ky, byTop, f) - Math.sin(f * Math.PI) * 260;
+  // 転がっている間は王冠が飛ばされて浮いている
+  const loose = t > T.roll + 1 && t < T.crown ? Math.sin(t * 5) * 10 - 30 : 0;
+  ctx.save(); ctx.translate(x, y + loose); ctx.rotate(f * Math.PI * 2);
+  ctx.fillStyle = C.gold; ctx.beginPath();
+  ctx.moveTo(-40, 0); ctx.lineTo(-40, -40); ctx.lineTo(-20, -18); ctx.lineTo(0, -48); ctx.lineTo(20, -18); ctx.lineTo(40, -40); ctx.lineTo(40, 0); ctx.closePath(); ctx.fill();
+  ctx.restore();
+}
+
+function drawBox(ctx, t) {
+  const s = BOX.s, x = BOX.x, y = gy(x);
+  const hitShake = THINGS.some((th) => t > th.ta && t < th.ta + 0.2) ? Math.sin(t * 90) * 3 : 0;
+  ctx.save(); ctx.translate(x + hitShake, y); ctx.rotate(SLOPE(x)); ctx.translate(0, -s / 2);
+  ctx.fillStyle = C.box; ctx.fillRect(-s / 2, -s / 2, s, s);
+  ctx.strokeStyle = C.boxDark; ctx.lineWidth = 8; ctx.strokeRect(-s / 2 + 4, -s / 2 + 4, s - 8, s - 8);
+  ctx.beginPath(); ctx.moveTo(-s / 2, -s / 2); ctx.lineTo(s / 2, s / 2); ctx.stroke();
+  ctx.rotate(-SLOPE(x));
+  ctx.fillStyle = 'rgba(184,134,78,0.9)'; rrect(ctx, -60, -40, 120, 60, 20); ctx.fill();
+  eyes(ctx, 150, t > T.crown + 1 ? 'happy' : 'grumpy', t, 1.7);
+  ctx.restore();
+}
+
+// ================= 背景 =================
+function drawWorld(ctx, t) {
+  // 地面
+  ctx.fillStyle = C.ground; ctx.beginPath(); ctx.moveTo(-600, gy(-600));
+  for (let x = -600; x <= SEA_X + 200; x += 20) ctx.lineTo(x, gy(x));
+  ctx.lineTo(SEA_X + 200, 3000); ctx.lineTo(-600, 3000); ctx.fill();
+  ctx.strokeStyle = C.groundDark; ctx.lineWidth = 10; ctx.beginPath();
+  for (let x = -600; x <= SEA_X + 200; x += 20) x === -600 ? ctx.moveTo(x, gy(x)) : ctx.lineTo(x, gy(x)); ctx.stroke();
+  // 海
+  ctx.fillStyle = C.sea; ctx.fillRect(SEA_X, SEA_Y, 3000, 2000);
+  ctx.strokeStyle = C.seaLight; ctx.lineWidth = 8;
+  for (let k = 0; k < 4; k++) { ctx.beginPath(); for (let x = SEA_X; x < SEA_X + 2500; x += 20) { const y = SEA_Y + 20 + k * 70 + Math.sin(x / 60 + t * 2 + k) * 8; x === SEA_X ? ctx.moveTo(x, y) : ctx.lineTo(x, y); } ctx.stroke(); }
+  // 机に王様がぶつかる前後: 机は王様の右
+}
+
+// 角度の表示（傾きに気づく瞬間）
+function angleMark(ctx, t) {
+  const a = Math.min(seg(t, 21.2, 21.8), 1 - seg(t, 24.4, 25.0));
+  if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha = a; ctx.strokeStyle = '#fff'; ctx.lineWidth = 5; ctx.setLineDash([16, 12]);
+  const x0 = 300, x1 = 1600;
+  ctx.beginPath(); ctx.moveTo(x0, gy(x0)); ctx.lineTo(x1, gy(x0)); ctx.stroke();
+  ctx.setLineDash([]); ctx.fillStyle = '#fff'; ctx.font = MARU(64); ctx.fillText('約3°', 1250, gy(x0) - 30);
+  ctx.restore();
+}
+
+// おふれの巻物
+function decree(ctx, t) {
+  const a = Math.min(seg(t, T.decree, T.decree + 0.4), 1 - seg(t, 10.6, 11.1));
+  if (a <= 0) return;
+  const open = ease.outCubic(seg(t, T.decree + 0.2, T.decree + 1.0));
+  ctx.save(); ctx.globalAlpha = a; ctx.translate(W / 2, 560);
+  const h = 380 * open;
+  ctx.fillStyle = '#fbf3df'; ctx.fillRect(-300, -h / 2, 600, h);
+  ctx.fillStyle = '#c9a36b'; rrect(ctx, -330, -h / 2 - 24, 660, 40, 20); ctx.fill(); rrect(ctx, -330, h / 2 - 16, 660, 40, 20); ctx.fill();
+  if (open > 0.8) { ctx.fillStyle = C.ink; ctx.font = S.MIN(800, 150); ctx.textAlign = 'center'; ctx.fillText('角禁止', 0, 55); }
+  ctx.restore();
+}
+
+// ================= カメラ =================
+function camera(t) {
+  const x = kf(t, [[0, 60], [T.bump + 1, 60], [T.decree + 3.5, 520, 'inOut'], [T.roll, 560, 'inOut'], [T.roll + 4.5, 900, 'inOut'], [T.sea - 0.2, 1300, 'inOut'], [T.sea + 1.2, 2650, 'inOut'], [T.box, 2650, 'inOut'], [T.box + 2, 1850, 'inOut'], [T.crown, 1850, 'inOut'], [T.crown + 1.5, 1900, 'inOut']]);
+  return { x, y: gy(x + 540) - 1330 };
+}
+
+function draw(ctx, t) {
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, C.sky1); g.addColorStop(1, C.sky2);
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  // 雲（遠景はゆっくり）
+  const cam = camera(t);
+  ctx.fillStyle = 'rgba(255,255,255,0.85)';
+  for (const [x0, y0, s] of [[200, 380, 1], [760, 260, 1.3], [1400, 420, 0.9], [2100, 300, 1.2]]) {
+    const x = x0 - cam.x * 0.3;
+    for (const [dx, dy, r] of [[0, 0, 50], [50, -20, 62], [110, 0, 48]]) { ctx.beginPath(); ctx.arc(x + dx * s, y0 + dy * s, r * s, 0, Math.PI * 2); ctx.fill(); }
+  }
+  // 遠くの丘（視差）と太陽
+  ctx.fillStyle = 'rgba(255,236,170,0.9)'; ctx.beginPath(); ctx.arc(860 - cam.x * 0.05, 560, 110, 0, Math.PI * 2); ctx.fill();
+  for (const [k, col, base, amp] of [[0.15, '#cfe6c4', 1000, 90], [0.3, '#b3d8a8', 1110, 60]]) {
+    ctx.fillStyle = col; ctx.beginPath(); ctx.moveTo(0, H);
+    for (let x = 0; x <= W; x += 20) { const wx = x + cam.x * k; ctx.lineTo(x, base - cam.y * k + Math.sin(wx / 260) * amp + Math.sin(wx / 97) * amp * 0.3); }
+    ctx.lineTo(W, H); ctx.fill();
+  }
+  // 王様がぶつかった衝撃で画面がゆれる
+  const sh = t > T.bump && t < T.bump + 0.3 ? (1 - seg(t, T.bump, T.bump + 0.3)) * 16 : 0;
+  ctx.save(); ctx.translate(-cam.x + noise1(t * 40, 1) * sh, -cam.y);
+  drawWorld(ctx, t);
+  angleMark(ctx, t);
+  drawBox(ctx, t);
+  for (const th of THINGS) drawThing(ctx, th, t);
+  // 王様が机にぶつかった星
+  if (t > T.bump && t < T.bump + 2) { const k = THINGS.find((th) => th.kind === 'king'); for (let i = 0; i < 3; i++) { const a = t * 5 + i * 2.1; star(ctx, k.x + Math.cos(a) * 90, gy(k.x) - k.s - 30 + Math.sin(a) * 18, 18); } }
+  // しあわせな時間のハート
+  if (t > T.happy && t < 19.4) for (let i = 0; i < 5; i++) { const th = THINGS[(i * 3) % THINGS.length]; const p = ((t - T.happy - i * 0.5) % 2.5) / 2.5; if (t - T.happy < i * 0.5) continue; heart(ctx, th.x, gy(th.x) - th.s - 40 - p * 160, 34, 1 - p); }
+  ctx.restore();
+  decree(ctx, t);
+  S.caption(ctx, NARR, t, { y: 1560, size: 52, font: S.MIN(800, 52), shadow: 'rgba(40,30,60,0.55)' });
+  S.logo(ctx, t, NO, false);
+  S.endCard(ctx, t, T.end, NO, TITLE);
+}
+function star(ctx, x, y, r) {
+  ctx.fillStyle = C.gold; ctx.beginPath();
+  for (let i = 0; i < 10; i++) { const a = i * Math.PI / 5 - Math.PI / 2, rr = i % 2 ? r * 0.45 : r; ctx.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr); }
+  ctx.fill();
+}
+function heart(ctx, x, y, s, a) {
+  if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha = a; ctx.translate(x, y); ctx.scale(s / 50, s / 50); ctx.fillStyle = '#ff6b8f';
+  ctx.beginPath(); ctx.moveTo(0, 30); ctx.bezierCurveTo(-60, -10, -30, -60, 0, -28); ctx.bezierCurveTo(30, -60, 60, -10, 0, 30); ctx.fill();
+  ctx.restore();
+}
+
+MG.create({ duration: DURATION, draw, sfx, narration: NARR, fonts: [...S.fonts(S.textOf(NARR, '角禁止')), { family: 'Zen Maru Gothic', weight: 700, text: '約3°' }] });
+</script>
+</body>
+</html>

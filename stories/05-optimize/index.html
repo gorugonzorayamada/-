@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>第5話「最適化」</title>
+<link rel="stylesheet" href="../../node_modules/@fontsource/shippori-mincho/500.css">
+<link rel="stylesheet" href="../../node_modules/@fontsource/shippori-mincho/800.css">
+<link rel="stylesheet" href="../../node_modules/@fontsource/noto-sans-jp/400.css">
+<link rel="stylesheet" href="../../node_modules/@fontsource/noto-sans-jp/700.css">
+<link rel="stylesheet" href="../../lib/base.css">
+<script src="../../lib/mg.js"></script>
+<script src="../../lib/series.js"></script>
+</head>
+<body>
+<script>
+const { W, H, seg, ease, lerp, clamp, rrect, noise1, kf, rng } = MG;
+const NO = 5, TITLE = '最適化', DURATION = 56;
+const F = (w, s) => `${w} ${s}px "Noto Sans JP"`;
+
+// ================= 脚本 =================
+const NARR = S.lines([
+  [0.3, 'エヌ氏は、人生を最適化する\nアプリを入れた。', 'narrator', 'エヌしは、じんせいを、さいてきかする、アプリをいれた。'],
+  [4.9, 'あなたの一日を、分析します。', 'app', 'あなたの、いちにちを、ぶんせきします。'],
+  [8.0, '無駄を、削除します。', 'app', 'むだを、さくじょします。'],
+  [12.4, '効率は、みるみる上がった。', 'narrator', 'こうりつは、みるみる、あがった。'],
+  [16.2, '最後の無駄を検出しました。「猫」。', 'app', 'さいごの、むだを、けんしゅつしました。ねこ。'],
+  [21.0, 'エヌ氏は、少しだけ迷ってから、\n「はい」を押した。', 'narrator', 'エヌしは、すこしだけ、まよってから、はいを、おした。'],
+  [27.4, '最適化が、完了しました。', 'app', 'さいてきかが、かんりょうしました。'],
+  [30.8, 'ただし、幸福度が計測できません。', 'app', 'ただし、こうふくどが、けいそくできません。'],
+  [34.6, '原因を特定しました。', 'app', 'げんいんを、とくていしました。'],
+  [37.0, '削除した項目は、すべて、\nあなたが笑っていた時間でした。', 'app', 'さくじょした、こうもくは、すべて、あなたが、わらっていた、じかんでした。'],
+  [43.6, '復元します。', 'app', 'ふくげんします。'],
+  [46.4, '最後の無駄を、削除します。「本アプリ」。', 'app', 'さいごの、むだを、さくじょします。ほんアプリ。'],
+]);
+// 泡: ラベル, 時間, 半径, 位置, 色, 削除時刻
+const BUBBLES = [
+  { label: '睡眠', h: '7h', r: 175, x: 330, y: 760, c: '#8ea2ff' },
+  { label: '仕事', h: '8h', r: 185, x: 740, y: 720, c: '#9aa3b5' },
+  { label: '通勤', h: '1.5h', r: 95, x: 850, y: 1030, c: '#b8bfcc' },
+  { label: '食事', h: '1h', r: 100, x: 270, y: 1070, c: '#ffc27a' },
+  { label: '寄り道', h: '0.5h', r: 80, x: 560, y: 1010, c: '#ffa3b1', del: 9.0 },
+  { label: '雑談', h: '1h', r: 90, x: 150, y: 560, c: '#7fd6b8', del: 10.2 },
+  { label: '昼寝', h: '0.3h', r: 70, x: 940, y: 480, c: '#c3a7f0', del: 11.4 },
+  { label: '散歩', h: '0.5h', r: 80, x: 560, y: 470, c: '#9fe07a', del: 12.6 },
+  { label: '空を見る', h: '0.2h', r: 72, x: 120, y: 880, c: '#8fd3ff', del: 13.8 },
+  { label: '猫', h: '1h', r: 110, x: 560, y: 1230, c: '#ffcf5a', del: 25.9, cat: true },
+];
+const T = { appear: 4.6, dialog: 20.2, tap: 25.6, done: 27.0, happy: 30.2, restore: [43.8, 45.6], selfDel: 48.0, pop: 49.8, end: 52.8 };
+const effAt = (t) => { let e = 62; for (const b of BUBBLES) if (b.del) e += (b.cat ? 8 : 6) * ease.outCubic(seg(t, b.del + 0.4, b.del + 0.9)); return Math.min(100, Math.round(e * (1 - seg(t, T.restore[0], T.restore[1]) * 0.38))); };
+
+// ================= 効果音・BGM =================
+const sfx = [
+  { t: 0.2, type: 'music', dur: 16, bpm: 118, chords: [[60, 64, 67, 71], [57, 60, 64, 67], [65, 69, 72, 76], [67, 71, 74, 77]], pattern: 'pulse', timbre: 'synth', vol: 0.55, stopAt: 16, fadeOut: 0.4 },
+  { t: 16.2, type: 'alert', vol: 0.9 }, { t: 16.9, type: 'alert', vol: 0.9 },
+  { t: T.tap, type: 'tick', vol: 1 },
+  { t: T.done, type: 'bell', freq: 1046, vol: 0.6 },
+  { t: T.happy + 0.6, type: 'drone', dur: 13, vol: 0.7 },
+  { t: T.pop, type: 'bubble', pitch: 0.5, vol: 1.4 }, { t: T.pop + 0.6, type: 'meow', vol: 1 },
+  { t: T.pop + 0.4, type: 'music', dur: 6, bpm: 90, beats: 3, chords: [[60, 64, 67], [65, 69, 72], [67, 71, 74], [60, 64, 67]], pattern: 'waltz', timbre: 'box', padVol: 0.4, vol: 1 },
+];
+for (let i = 0; i < BUBBLES.length; i++) sfx.push({ t: T.appear + i * 0.18, type: 'pop', pitch: 1 + i * 0.08, vol: 0.4 });
+for (const b of BUBBLES) if (b.del) sfx.push({ t: b.del + 0.5, type: 'bubble', pitch: b.cat ? 0.7 : 1.2, vol: b.cat ? 1.2 : 0.9 });
+for (const b of BUBBLES) if (b.del) sfx.push({ t: T.restore[0] + (b.cat ? 1.4 : BUBBLES.indexOf(b) * 0.15 - 0.6), type: 'pop', pitch: 1.4, vol: 0.5 });
+
+// ================= UI =================
+const C = { bg: '#f3f4f9', card: '#ffffff', ink: '#1f2433', sub: '#8a90a2', accent: '#4a5cff', red: '#ff4d5e', good: '#27c28a' };
+
+// 泡の状態: 表示の大きさと透明度
+function bubbleState(b, t) {
+  let s = ease.outBack(seg(t, T.appear + BUBBLES.indexOf(b) * 0.18, T.appear + BUBBLES.indexOf(b) * 0.18 + 0.5));
+  let flag = 0, gone = false;
+  if (b.del) {
+    flag = seg(t, b.del, b.del + 0.2);
+    const rs = T.restore[0] + (b.cat ? 1.2 : BUBBLES.indexOf(b) * 0.15 - 0.6), rp = seg(t, rs, rs + 0.5);
+    if (rp > 0) { s = ease.outBack(rp); flag = 0; }         // 復元
+    else if (t > b.del + 0.6) { s = 0; gone = true; }       // 削除済み
+    else if (t > b.del + 0.4) s = 1 + seg(t, b.del + 0.4, b.del + 0.6) * 0.3; // 割れる直前にふくらむ
+  }
+  // 最後はアプリ自体が消えて、猫だけが残る
+  if (t > T.selfDel && !b.cat) s *= 1 - ease.inCubic(seg(t, T.selfDel + 0.3, T.pop));
+  return { s, flag, gone };
+}
+
+function drawBubble(ctx, b, t) {
+  const st = bubbleState(b, t);
+  if (st.s <= 0.01) return;
+  const wob = Math.sin(t * 1.3 + b.x) * 6;
+  let x = b.x, y = b.y + wob;
+  if (b.cat && t > T.selfDel) { x = lerp(b.x, W / 2, ease.inOut(seg(t, T.pop, T.pop + 1))); y = lerp(b.y, 780, ease.inOut(seg(t, T.pop, T.pop + 1))); }
+  const grow = b.cat ? 1 + 0.7 * ease.inOut(seg(t, T.pop, T.pop + 1)) : 1;
+  ctx.save(); ctx.translate(x, y); ctx.scale(st.s * grow, st.s * grow);
+  const blink = b.cat && t > 16.2 && t < T.tap ? 0.5 + 0.5 * Math.sin(t * 12) : 0;
+  ctx.fillStyle = b.c; ctx.beginPath(); ctx.arc(0, 0, b.r, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.35)'; ctx.beginPath(); ctx.arc(-b.r * 0.35, -b.r * 0.4, b.r * 0.22, 0, Math.PI * 2); ctx.fill();
+  if (st.flag > 0 || blink > 0) { ctx.strokeStyle = C.red; ctx.lineWidth = 10; ctx.globalAlpha = Math.max(st.flag, blink); ctx.beginPath(); ctx.arc(0, 0, b.r + 8, 0, Math.PI * 2); ctx.stroke(); ctx.globalAlpha = 1; }
+  if (b.cat) catFace(ctx, b.r, t);
+  ctx.fillStyle = C.ink; ctx.textAlign = 'center'; ctx.font = F(700, Math.min(52, b.r * 0.42));
+  ctx.fillText(b.label, 0, b.cat ? b.r * 0.62 : 8);
+  if (!b.cat) { ctx.font = F(400, Math.min(34, b.r * 0.3)); ctx.fillStyle = 'rgba(31,36,51,0.6)'; ctx.fillText(b.h, 0, b.r * 0.42); }
+  // 「削除」スタンプ
+  if (st.flag > 0 && !b.cat) { ctx.save(); ctx.rotate(-0.2); ctx.globalAlpha = st.flag; ctx.strokeStyle = C.red; ctx.lineWidth = 5; ctx.strokeRect(-70, -28, 140, 56); ctx.fillStyle = C.red; ctx.font = F(700, 38); ctx.fillText('削除', 0, 13); ctx.restore(); }
+  ctx.restore();
+}
+function catFace(ctx, r, t) {
+  const k = r / 110;
+  ctx.save(); ctx.scale(k, k); ctx.translate(0, -12);
+  ctx.fillStyle = '#3a2f22';
+  ctx.beginPath(); ctx.moveTo(-60, -40); ctx.lineTo(-40, -95); ctx.lineTo(-10, -55); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(60, -40); ctx.lineTo(40, -95); ctx.lineTo(10, -55); ctx.fill();
+  const bl = t % 4 < 0.15;
+  for (const s of [-1, 1]) { ctx.beginPath(); ctx.ellipse(s * 28, -10, 8, bl ? 1 : 12, 0, 0, Math.PI * 2); ctx.fill(); }
+  ctx.beginPath(); ctx.moveTo(-8, 10); ctx.lineTo(8, 10); ctx.lineTo(0, 18); ctx.fill();
+  ctx.strokeStyle = '#3a2f22'; ctx.lineWidth = 3; for (const s of [-1, 1]) for (const d of [-6, 6]) { ctx.beginPath(); ctx.moveTo(s * 20, 20 + d * 0.3); ctx.lineTo(s * 60, 16 + d); ctx.stroke(); }
+  ctx.restore();
+}
+
+function meter(ctx, x, y, w, label, val, color, alpha = 1) {
+  if (alpha <= 0) return;
+  ctx.save(); ctx.globalAlpha *= alpha;
+  ctx.fillStyle = C.sub; ctx.font = F(700, 32); ctx.textAlign = 'left'; ctx.fillText(label, x, y);
+  ctx.fillStyle = color; ctx.font = F(700, 60); ctx.textAlign = 'right'; ctx.fillText(`${val}%`, x + w, y + 12);
+  ctx.fillStyle = '#e3e6ef'; rrect(ctx, x, y + 30, w, 22, 11); ctx.fill();
+  ctx.fillStyle = color; rrect(ctx, x, y + 30, Math.max(22, w * val / 100), 22, 11); ctx.fill();
+  ctx.restore();
+}
+
+function header(ctx, t) {
+  ctx.fillStyle = C.card; ctx.fillRect(0, 0, W, 330);
+  ctx.fillStyle = C.accent; rrect(ctx, 60, 110, 90, 90, 24); ctx.fill();
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = 8; ctx.beginPath(); ctx.moveTo(80, 170); ctx.lineTo(100, 150); ctx.lineTo(115, 165); ctx.lineTo(135, 135); ctx.stroke();
+  ctx.fillStyle = C.ink; ctx.font = F(700, 46); ctx.textAlign = 'left'; ctx.fillText('人生最適化', 176, 158);
+  ctx.fillStyle = C.sub; ctx.font = F(400, 28); ctx.fillText(t < T.appear ? 'インストール中…' : t < T.done ? '最適化中…' : t < T.restore[0] ? '完了' : '復元中…', 178, 200);
+  const e = effAt(t);
+  meter(ctx, 60, 262, W - 120, '効率', e, C.accent, seg(t, T.appear, T.appear + 0.5));
+}
+
+// 幸福度メーター（最適化完了後に出てくる）
+function happiness(ctx, t) {
+  const a = seg(t, T.happy, T.happy + 0.6) * (1 - ease.inCubic(seg(t, T.selfDel + 0.3, T.pop)));
+  if (a <= 0) return;
+  const v = Math.round(lerp(0, 88, ease.outCubic(seg(t, T.restore[0], T.restore[1] + 1.2))));
+  const y = lerp(300, 420, ease.outCubic(seg(t, T.happy, T.happy + 0.6)));
+  ctx.save(); ctx.globalAlpha = a; ctx.fillStyle = C.card; rrect(ctx, 30, y - 55, W - 60, 180, 30); ctx.fill(); ctx.restore();
+  meter(ctx, 80, y, W - 160, '幸福度', v, v < 10 ? C.red : C.good, a);
+  // 心電図のような線（0% の間は平ら）
+  ctx.save(); ctx.globalAlpha = a; ctx.strokeStyle = v < 10 ? C.red : C.good; ctx.lineWidth = 4; ctx.beginPath();
+  for (let x = 80; x < W - 80; x += 6) { const ph = (x / 60 - t * 3) % 6; const beat = v > 10 && ph > 0 && ph < 1 ? Math.sin(ph * Math.PI * 2) * 30 * v / 100 : 0; x === 80 ? ctx.moveTo(x, y + 100 - beat) : ctx.lineTo(x, y + 100 - beat); }
+  ctx.stroke(); ctx.restore();
+}
+
+// 削除確認ダイアログ
+function dialog(ctx, t) {
+  const a = Math.min(seg(t, T.dialog, T.dialog + 0.3), 1 - seg(t, T.tap + 0.2, T.tap + 0.5));
+  if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha = a * 0.35; ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H); ctx.restore();
+  ctx.save(); ctx.globalAlpha = a;
+  const s = lerp(0.9, 1, ease.outBack(seg(t, T.dialog, T.dialog + 0.3)));
+  ctx.translate(W / 2, 820); ctx.scale(s, s);
+  ctx.fillStyle = C.card; rrect(ctx, -400, -200, 800, 400, 40); ctx.fill();
+  ctx.fillStyle = C.ink; ctx.textAlign = 'center'; ctx.font = F(700, 52); ctx.fillText('「猫」を削除しますか？', 0, -80);
+  ctx.fillStyle = C.sub; ctx.font = F(400, 32); ctx.fillText('効率が +8% 向上します', 0, -20);
+  const press = t > T.tap && t < T.tap + 0.2 ? 0.94 : 1;
+  ctx.fillStyle = '#eef0f6'; rrect(ctx, -360, 50, 340, 110, 26); ctx.fill();
+  ctx.fillStyle = C.ink; ctx.font = F(700, 44); ctx.fillText('いいえ', -190, 122);
+  ctx.save(); ctx.translate(190, 105); ctx.scale(press, press); ctx.fillStyle = C.red; rrect(ctx, -170, -55, 340, 110, 26); ctx.fill();
+  ctx.fillStyle = '#fff'; ctx.fillText('はい', 0, 17); ctx.restore();
+  // 迷う指: 「いいえ」と「はい」の間をさまよう
+  const fx = kf(t, [[T.dialog + 0.6, 400], [22.4, -150, 'inOut'], [23.6, -120, 'inOut'], [24.4, 120, 'inOut'], [25.0, 90, 'inOut'], [T.tap, 190, 'inOut']]);
+  const fy = kf(t, [[T.dialog + 0.6, 460], [22.4, 170, 'inOut'], [T.tap - 0.2, 170], [T.tap, 120, 'inQuad']]);
+  ctx.fillStyle = 'rgba(40,40,50,0.85)'; ctx.beginPath(); ctx.ellipse(fx, fy + 60, 44, 70, -0.2, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+// 最後: アプリの画面ごと泡になって割れる
+function selfDelete(ctx, t) {
+  const p = seg(t, T.selfDel + 0.3, T.pop);
+  if (p <= 0 || t > T.pop + 0.3) return;
+  const r = lerp(900, 120, ease.inCubic(p));
+  ctx.save(); ctx.strokeStyle = C.accent; ctx.lineWidth = 10; ctx.globalAlpha = 1 - seg(t, T.pop, T.pop + 0.3);
+  ctx.beginPath(); ctx.arc(W / 2, 900, r, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
+}
+
+function draw(ctx, t) {
+  // アプリが消えた後は、ホーム画面のようなやわらかい背景
+  const home = seg(t, T.pop, T.pop + 0.8);
+  ctx.fillStyle = C.bg; ctx.fillRect(0, 0, W, H);
+  if (home > 0) { const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#ffe7b8'); g.addColorStop(1, '#ffd2c2'); ctx.globalAlpha = home; ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); ctx.globalAlpha = 1; }
+  // スキャン線（分析中）
+  if (t > T.appear && t < 7.2) { const y = lerp(380, 1350, seg(t, T.appear, 7.2)); ctx.fillStyle = 'rgba(74,92,255,0.15)'; ctx.fillRect(0, y - 30, W, 60); ctx.fillStyle = C.accent; ctx.fillRect(0, y, W, 3); }
+  ctx.save(); ctx.translate(0, 150); for (const b of BUBBLES) drawBubble(ctx, b, t); ctx.restore();
+  // 復元中は削除した項目の名前が光る
+  ctx.save(); ctx.globalAlpha = 1 - ease.inCubic(seg(t, T.selfDel + 0.3, T.pop)); header(ctx, t); ctx.restore();
+  happiness(ctx, t);
+  dialog(ctx, t);
+  selfDelete(ctx, t);
+  // 字幕: 語り手は白文字（黒帯）、アプリは青い帯
+  S.caption(ctx, NARR, t, { only: ['narrator'], y: 1580, style: 'box', size: 54, font: S.MIN(800, 54), boxColor: 'rgba(20,22,32,0.82)' });
+  S.caption(ctx, NARR, t, { only: ['app'], y: 1580, style: 'box', size: 50, font: F(700, 50), boxColor: 'rgba(74,92,255,0.92)' });
+  S.logo(ctx, t, NO, false, 420);
+  S.endCard(ctx, t, T.end, NO, TITLE);
+}
+
+MG.create({
+  duration: DURATION, draw, sfx, narration: NARR,
+  fonts: S.fonts(S.textOf(NARR, BUBBLES.map((b) => b.label + b.h).join('') + '人生最適化インストール中…最適化中…完了復元中…効率幸福度%「猫」を削除しますか？効率が +8% 向上しますいいえはい削除h.'), { sans: true }),
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>第2話「一日先の影」</title>
+<link rel="stylesheet" href="../../node_modules/@fontsource/shippori-mincho/500.css">
+<link rel="stylesheet" href="../../node_modules/@fontsource/shippori-mincho/800.css">
+<link rel="stylesheet" href="../../lib/base.css">
+<script src="../../lib/mg.js"></script>
+<script src="../../lib/series.js"></script>
+</head>
+<body>
+<script>
+const { W, H, seg, ease, lerp, clamp, rrect, noise1, kf, rng } = MG;
+const NO = 2, TITLE = '一日先の影', DURATION = 58;
+
+// ================= 脚本 =================
+const NARR = S.lines([
+  [0.3, 'ある日、男の影がずれた。', 'narrator', 'あるひ、おとこのかげがずれた。'],
+  [3.6, 'ずれは、日に日に大きくなった。', 'narrator', 'ずれは、ひにひに、おおきくなった。'],
+  [7.6, 'ある夕方、影だけが転んだ。', 'narrator', 'あるゆうがた、かげだけがころんだ。'],
+  [11.4, '翌日、男は同じ場所で転んだ。', 'narrator', 'よくじつ、おとこは、おなじばしょでころんだ。'],
+  [15.0, '影は、一日先の自分だった。', 'narrator', 'かげは、いちにちさきのじぶんだった。'],
+  [18.8, '男は、影を頼りに\n暮らすようになった。', 'narrator', 'おとこは、かげをたよりに、くらすようになった。'],
+  [26.0, 'ある日の帰り道。', 'narrator', 'あるひの、かえりみち。'],
+  [28.6, '駅のホームで、\n影が誰かと抱き合った。', 'narrator', 'えきのホームで、かげが、だれかとだきあった。'],
+  [33.2, '明日の、この時間だ。', 'narrator', 'あしたの、このじかんだ。'],
+  [36.6, '翌日。男は、同じ場所で待った。', 'narrator', 'よくじつ。おとこは、おなじばしょでまった。'],
+  [40.4, '誰も来なかった。', 'narrator', 'だれもこなかった。'],
+  [42.6, '隣には、足元ばかり見ている\n女がいるだけだった。', 'narrator', 'となりには、あしもとばかりみている、おんながいるだけだった。'],
+  [47.6, '女の影も、ずれていた。', 'narrator', 'おんなのかげも、ずれていた。'],
+  [52.0, '影のほうが、せっかちだった。', 'narrator', 'かげのほうが、せっかちだった。'],
+]);
+const T = { s1: 0, s2: 7.4, s3: 11.0, s4: 14.6, s5: 18.4, rain: 22.2, s6: 25.6, s7: 36.2, reveal: 47.4, anata: 49.8, hug: 52.6, end: 55.2 };
+const CRACK = 330, GROUND = 1440;
+
+// ================= 効果音・BGM =================
+const sfx = [
+  { t: 0, type: 'music', dur: 25.6, bpm: 70, beats: 4, chords: [[57, 60, 64], [53, 57, 60], [50, 53, 57], [52, 56, 59]], pattern: 'sparse', timbre: 'piano', padVol: 0.5, vol: 0.9, stopAt: 25.4 },
+  { t: 25.6, type: 'music', dur: 21.8, bpm: 70, beats: 4, chords: [[53, 57, 60], [55, 59, 62], [52, 55, 59], [57, 60, 64]], pattern: 'sparse', timbre: 'box', padVol: 0.6, vol: 0.9, stopAt: 21.6 },
+  { t: 47.4, type: 'music', dur: 10.6, bpm: 96, beats: 3, chords: [[48, 52, 55], [45, 48, 52], [41, 45, 48], [43, 47, 50]], pattern: 'waltz', timbre: 'box', padVol: 0.5, vol: 1.1 },
+  { t: T.s2 + 1.9, type: 'thump', pitch: 1.3, vol: 0.5 }, { t: T.s3 + 1.9, type: 'thump', pitch: 1.1 },
+  { t: T.s6, type: 'train', dur: 4, vol: 0.6 }, { t: T.s7, type: 'train', dur: 4, vol: 0.6 },
+];
+// 足音
+for (let t = 0.2; t < 14.4; t += 0.42) if (!(t > T.s3 + 1.9 && t < T.s4)) sfx.push({ t, type: 'step', vol: 0.5 });
+// 雨
+for (let i = 0, r = rng(5); i < 90; i++) sfx.push({ t: T.rain + (r() + 1) / 2 * 3.3, type: 'tick', vol: 0.12 });
+
+// ================= 人物 =================
+const INK = '#120f18';
+// o: {x, s, walk(位相, 省略で直立), lean, look(-1..1), hair, skirt, armL, armR, umbrella, watch}
+function person(ctx, o, color = INK) {
+  const s = o.s || 1;
+  ctx.save(); ctx.translate(o.x, 0); ctx.rotate(o.lean || 0); ctx.scale(s, s * (1 - Math.max(0, (o.lean || 0) - 0.4) * 0.3));
+  ctx.fillStyle = color; ctx.strokeStyle = color; ctx.lineCap = 'round';
+  const w = o.walk ?? null, sw = w === null ? 0 : Math.sin(w) * 0.38;
+  // 脚
+  for (const [side, a] of [[-1, sw], [1, -sw]]) {
+    ctx.save(); ctx.translate(side * 26, -420); ctx.rotate(a); rrect(ctx, -22, 0, 44, 420, 20); ctx.fill(); ctx.restore();
+  }
+  // 胴体（スカートは台形を広げる）
+  ctx.beginPath(); ctx.moveTo(-66, -800); ctx.lineTo(66, -800); ctx.lineTo(o.skirt ? 120 : 84, -380); ctx.lineTo(o.skirt ? -120 : -84, -380); ctx.closePath(); ctx.fill();
+  rrect(ctx, -80, -830, 160, 120, 60); ctx.fill();
+  // 腕（0=下、π=真上）
+  ctx.lineWidth = 40;
+  for (const [side, def] of [[-1, o.armL], [1, o.armR]]) {
+    const ang = def ?? (w === null ? 0.1 : 0.1 - side * sw * 0.8);
+    const sx = side * 68, sy = -790, len = 320;
+    const hx = sx + Math.sin(ang) * len * side, hy = sy + Math.cos(ang) * len;
+    ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(hx, hy); ctx.stroke();
+    if (o.umbrella && side === 1) { // 傘
+      ctx.lineWidth = 8; ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo(hx, hy - 420); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(hx - 300, hy - 380); ctx.quadraticCurveTo(hx, hy - 620, hx + 300, hy - 380); ctx.closePath(); ctx.fill();
+      ctx.lineWidth = 40;
+    }
+  }
+  // 頭
+  ctx.fillRect(-18, -880, 36, 60);
+  const lk = o.look || 0;
+  ctx.save(); ctx.translate(lk * 8, -950 + (o.nod || 0) * 20); ctx.rotate((o.nod || 0) * 0.3 * Math.sign(lk || 1));
+  if (o.hair === 'long') { rrect(ctx, -80, -30, 160, 200, 60); ctx.fill(); }
+  ctx.beginPath(); ctx.ellipse(0, 0, 68, 82, 0, 0, Math.PI * 2); ctx.fill();
+  if (Math.abs(lk) > 0.05) { ctx.beginPath(); ctx.moveTo(64 * Math.sign(lk), -10); ctx.lineTo((64 + 22 * Math.abs(lk)) * Math.sign(lk), 16); ctx.lineTo(58 * Math.sign(lk), 26); ctx.fill(); }
+  ctx.restore();
+  ctx.restore();
+}
+// 影: 夕日が左から差し、背後の壁に映る
+function shadow(ctx, o, alpha = 0.5) {
+  ctx.save();
+  ctx.translate(0, GROUND); ctx.transform(1, 0, -0.22, 1.12, 0, 0);
+  ctx.globalAlpha = alpha;
+  person(ctx, o, '#3a1422');
+  ctx.restore();
+}
+function body(ctx, o) { ctx.save(); ctx.translate(0, GROUND); person(ctx, o); ctx.restore(); }
+
+// ================= 背景 =================
+const bld = (() => { const r = rng(4), a = []; for (let x = -100; x < 1300; x += 90 + Math.floor(r() * 80)) a.push([x, 250 + r() * 380, 80 + r() * 60]); return a; })();
+function street(ctx, t, rain) {
+  const g = ctx.createLinearGradient(0, 0, 0, GROUND);
+  if (rain) { g.addColorStop(0, '#5d6570'); g.addColorStop(1, '#9aa3ab'); }
+  else { g.addColorStop(0, '#6b4a8a'); g.addColorStop(0.6, '#e98a6a'); g.addColorStop(1, '#ffd29a'); }
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, GROUND);
+  if (!rain) { ctx.fillStyle = 'rgba(255,240,200,0.85)'; ctx.beginPath(); ctx.arc(120, GROUND - 260, 90, 0, Math.PI * 2); ctx.fill(); }
+  ctx.fillStyle = rain ? '#4b525b' : '#5a3d62';
+  for (const [x, h, w] of bld) ctx.fillRect(x, 560 - h * 0.6, w, h);
+  // 夕日に照らされた壁（影が映るスクリーン）
+  const wg = ctx.createLinearGradient(0, 560, W, GROUND);
+  if (rain) { wg.addColorStop(0, '#8d949b'); wg.addColorStop(1, '#767d85'); } else { wg.addColorStop(0, '#f0b68a'); wg.addColorStop(1, '#d88f6c'); }
+  ctx.fillStyle = wg; ctx.fillRect(0, 560, W, GROUND - 560);
+  ctx.fillStyle = rain ? '#5f666e' : '#b56f58'; ctx.fillRect(0, 540, W, 34);
+  ctx.fillStyle = 'rgba(0,0,0,0.06)'; for (let y = 640; y < GROUND; y += 110) ctx.fillRect(0, y, W, 3);
+  // 歩道
+  ctx.fillStyle = rain ? '#6e747c' : '#caa58c'; ctx.fillRect(0, GROUND, W, H - GROUND);
+  ctx.fillStyle = 'rgba(0,0,0,0.12)'; for (let x = 0; x < W; x += 180) ctx.fillRect(x, GROUND, 4, H - GROUND);
+  // ひび割れ
+  ctx.strokeStyle = 'rgba(40,20,30,0.6)'; ctx.lineWidth = 5; ctx.beginPath();
+  ctx.moveTo(CRACK - 60, GROUND + 30); ctx.lineTo(CRACK - 20, GROUND + 60); ctx.lineTo(CRACK - 40, GROUND + 90); ctx.lineTo(CRACK + 10, GROUND + 130); ctx.stroke();
+  if (rain) {
+    const r = rng(Math.floor(t * 14)); ctx.strokeStyle = 'rgba(230,240,255,0.55)'; ctx.lineWidth = 3;
+    for (let i = 0; i < 90; i++) { const x = r() * W * 1.2, y = r() * H; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x - 20, y + 50); ctx.stroke(); }
+  }
+}
+function platform(ctx, t) {
+  const g = ctx.createLinearGradient(0, 0, 0, GROUND);
+  g.addColorStop(0, '#2f2d52'); g.addColorStop(0.55, '#b76e79'); g.addColorStop(1, '#f6c28b');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, GROUND);
+  ctx.fillStyle = 'rgba(255,230,190,0.9)'; ctx.beginPath(); ctx.arc(80, GROUND - 200, 70, 0, Math.PI * 2); ctx.fill();
+  // 夕日に照らされた駅舎の壁（影が映る）
+  const wg = ctx.createLinearGradient(0, 600, W, GROUND);
+  wg.addColorStop(0, '#f2c29a'); wg.addColorStop(1, '#d99a7a');
+  ctx.fillStyle = wg; ctx.fillRect(0, 600, W, GROUND - 600);
+  ctx.fillStyle = 'rgba(0,0,0,0.07)'; for (let x = 60; x < W; x += 240) ctx.fillRect(x, 600, 4, GROUND - 600);
+  // 屋根と柱
+  ctx.fillStyle = INK; ctx.fillRect(0, 300, W, 60);
+  for (const x of [20, 1030]) ctx.fillRect(x, 360, 30, GROUND - 360);
+  // 時計
+  ctx.fillStyle = INK; ctx.fillRect(520, 360, 12, 60);
+  ctx.fillStyle = '#f4efe6'; ctx.beginPath(); ctx.arc(526, 480, 64, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = INK; ctx.lineWidth = 8; ctx.beginPath(); ctx.arc(526, 480, 64, 0, Math.PI * 2); ctx.stroke();
+  ctx.lineWidth = 7; ctx.beginPath(); ctx.moveTo(526, 480); ctx.lineTo(526 + 30 * Math.cos(-0.3), 480 + 30 * Math.sin(-0.3)); ctx.moveTo(526, 480); ctx.lineTo(526, 480 + 46); ctx.stroke();
+  // ホーム
+  ctx.fillStyle = '#8c7f86'; ctx.fillRect(0, GROUND, W, H - GROUND);
+  ctx.fillStyle = '#e8c14a'; ctx.fillRect(0, GROUND + 330, W, 26);
+  ctx.fillStyle = '#3a3440'; ctx.fillRect(0, H - 90, W, 90);
+}
+
+// ================= シーンごとの動き =================
+function man(t) {
+  // [本体, 影]
+  if (t < T.s2) { // 歩く。影の足並みが少しずつずれる
+    const x = lerp(160, 760, t / T.s2), ph = t * 7.5, lag = seg(t, 1, 7) * 2.6;
+    return [{ x, walk: ph, look: 0.4 }, { x: x - lag * 12, walk: ph - lag, look: 0.4 }];
+  }
+  if (t < T.s3) { // 影だけが転ぶ
+    const x = lerp(260, 820, seg(t, T.s2, T.s3)), ph = t * 7.5;
+    const f = seg(t, T.s2 + 1.6, T.s2 + 2.2);
+    const sx = f > 0 ? CRACK + 30 : x;
+    return [{ x, walk: ph, look: 0.4 }, { x: sx, walk: f > 0 ? null : ph, lean: ease.outCubic(f) * 1.35, look: 0.4 }];
+  }
+  if (t < T.s4) { // 翌日、本体が同じ場所で転ぶ。影は普通に歩き去る
+    const x = lerp(260, 820, seg(t, T.s3, T.s4)), ph = t * 7.5;
+    const f = seg(t, T.s3 + 1.6, T.s3 + 2.2);
+    const bx = f > 0 ? CRACK + 30 : x;
+    return [{ x: bx, walk: f > 0 ? null : ph, lean: ease.outCubic(f) * 1.35, look: 0.4 }, { x, walk: ph, look: 0.4 }];
+  }
+  if (t < T.s5) { // 起き上がって、影を見る。影は手を振る
+    const up = seg(t, T.s4, T.s4 + 1);
+    return [{ x: 520, lean: (1 - ease.outCubic(up)) * 1.2, look: 0.7, nod: seg(t, T.s4 + 1.2, T.s4 + 1.6) }, { x: 520, armR: 2.6 + Math.sin(t * 8) * 0.3, look: 0.7 }];
+  }
+  if (t < T.rain) { // 晴れの日、影だけ傘をさしている
+    const x = lerp(260, 620, seg(t, T.s5, T.rain)), ph = t * 6;
+    return [{ x, walk: ph, look: 0.4 }, { x, walk: ph, look: 0.4, armR: 0.9, umbrella: true }];
+  }
+  if (t < T.s6) { // 翌日は雨。本体も傘を持っている
+    const x = lerp(260, 620, seg(t, T.rain, T.s6)), ph = t * 6;
+    return [{ x, walk: ph, look: 0.4, armR: 0.9, umbrella: true }, null];
+  }
+  if (t < T.s7) return [{ x: 400, look: 0.2 }, { x: 430, look: 1, armL: 0.5, armR: 0.9, nod: 0.3 }];
+  // 翌日のホーム。女に気づくまでは影は本体と同じ
+  const turn = seg(t, T.anata - 0.6, T.anata);
+  const step = ease.inOut(seg(t, T.hug, T.hug + 1));
+  const b = { x: lerp(400, 560, step), look: lerp(0, 1, turn), armL: t < T.reveal ? 0.9 : lerp(0.1, 0.5, step), armR: lerp(0.1, 0.9, step), nod: step * 0.3 };
+  const sh = t < T.reveal ? { ...b } : shadowWalk(t, 0);
+  return [b, sh];
+}
+function woman(t) {
+  if (t >= T.s6 && t < T.s7) return [null, { x: 530, hair: 'long', skirt: true, s: 0.9, look: -1, armL: 0.9, armR: 0.5, nod: 0.3 }];
+  if (t < T.s7) return [null, null];
+  const fidget = t < T.anata ? Math.sin(t * 2.2) * 0.3 : 0;
+  const turn = seg(t, T.anata - 0.8, T.anata - 0.3);
+  const step = ease.inOut(seg(t, T.hug, T.hug + 1));
+  const b = { x: lerp(820, 680, step), hair: 'long', skirt: true, s: 0.9, look: lerp(0.3 + fidget, -1, turn), nod: t < T.anata ? 0.6 : 0.2 + step * 0.1, armR: lerp(0.1, 0.5, step), armL: lerp(0.1, 0.9, step) };
+  const sh = t < T.reveal ? { ...b } : shadowWalk(t, 1);
+  return [b, sh];
+}
+// 種明かし後: 2人の影が寄り添い、手をつないで先に歩いていく
+function shadowWalk(t, who) {
+  const meet = ease.inOut(seg(t, T.reveal + 0.5, T.reveal + 2.5));
+  const go = seg(t, T.anata + 1.8, T.end);
+  const baseX = who === 0 ? lerp(400, 560, meet) : lerp(820, 690, meet);
+  const x = baseX + go * go * 900;
+  return { x, walk: go > 0 ? t * 6 : null, hair: who ? 'long' : undefined, skirt: !!who, s: who ? 0.9 : 1, look: who ? -0.6 : 0.6, armR: who ? undefined : 1.1, armL: who ? 1.1 : undefined };
+}
+
+// ================= 描画 =================
+function label(ctx, t, text, a0, a1) {
+  const a = Math.min(seg(t, a0, a0 + 0.3), 1 - seg(t, a1 - 0.3, a1));
+  if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha = a; ctx.font = S.MIN(800, 64); ctx.textAlign = 'center';
+  ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.fillText(text, W / 2 + 3, 423); ctx.fillStyle = '#fff'; ctx.fillText(text, W / 2, 420);
+  ctx.restore();
+}
+
+function draw(ctx, t) {
+  const plat = t >= T.s6;
+  if (plat) platform(ctx, t); else street(ctx, t, t >= T.rain);
+  const [mb, ms] = man(t), [wb, ws] = woman(t);
+  // 影（ずれて見えるよう、本体より先に描く）
+  if (ms) shadow(ctx, ms); if (ws) shadow(ctx, ws);
+  if (mb) body(ctx, mb); if (wb) body(ctx, wb);
+  // 種明かしで影を少し光らせる
+  if (t > T.reveal && t < T.reveal + 1.5) { const a = Math.sin(seg(t, T.reveal, T.reveal + 1.5) * Math.PI) * 0.25; ctx.fillStyle = `rgba(255,230,180,${a})`; ctx.fillRect(0, GROUND, W, H - GROUND); }
+  // 日付ラベル
+  const days = [['1日目', 3.6, 4.8], ['3日目', 4.8, 5.9], ['7日目', 5.9, 7.2], ['翌日', T.s3, T.s3 + 1.5], ['翌日', T.rain, T.rain + 1.5], ['翌日', T.s7, T.s7 + 1.8]];
+  for (const [s, a, b] of days) label(ctx, t, s, a, b);
+  // 「……あなたも？」
+  const aa = Math.min(seg(t, T.anata, T.anata + 0.3), 1 - seg(t, T.hug - 0.2, T.hug));
+  if (aa > 0) {
+    ctx.save(); ctx.globalAlpha = aa; ctx.fillStyle = 'rgba(255,255,255,0.92)'; rrect(ctx, 560, 400, 420, 120, 60); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(760, 515); ctx.lineTo(800, 580); ctx.lineTo(800, 515); ctx.fill();
+    ctx.fillStyle = INK; ctx.font = S.MIN(800, 52); ctx.textAlign = 'center'; ctx.fillText('……あなたも？', 770, 478); ctx.restore();
+  }
+  // 場面転換の暗転
+  for (const x of [T.s2, T.s3, T.s4, T.s5, T.s6, T.s7]) { const k = 1 - Math.abs(t - x) / 0.25; if (k > 0) { ctx.fillStyle = `rgba(0,0,0,${k})`; ctx.fillRect(0, 0, W, H); } }
+  S.caption(ctx, NARR, t, { y: 1580, size: 54, font: S.MIN(800, 54) });
+  S.logo(ctx, t, NO);
+  S.endCard(ctx, t, T.end, NO, TITLE);
+}
+
+MG.create({ duration: DURATION, draw, sfx, narration: NARR, fonts: S.fonts(S.textOf(NARR, '日目翌日……あなたも？')) });
+</script>
+</body>
+</html>

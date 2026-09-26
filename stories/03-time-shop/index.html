@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>第3話「時間買い取ります」</title>
+<link rel="stylesheet" href="../../node_modules/@fontsource/shippori-mincho/500.css">
+<link rel="stylesheet" href="../../node_modules/@fontsource/shippori-mincho/800.css">
+<link rel="stylesheet" href="../../lib/base.css">
+<script src="../../lib/mg.js"></script>
+<script src="../../lib/series.js"></script>
+</head>
+<body>
+<script>
+const { W, H, seg, ease, lerp, clamp, rrect, noise1, kf, rng } = MG;
+const NO = 3, TITLE = '時間買い取ります', DURATION = 58.5;
+
+// ================= 脚本 =================
+const NARR = S.lines([
+  [0.4, '「時間、買い取ります。」', 'narrator', 'じかん、かいとります。'],
+  [3.6, 'エヌ氏は、退屈な時間を売ることにした。', 'narrator', 'エヌしは、たいくつなじかんを、うることにした。'],
+  [12.0, '売った時間は、一瞬で過ぎ去る。', 'narrator', 'うったじかんは、いっしゅんで、すぎさる。'],
+  [15.6, 'いやな時間も、売った。', 'narrator', 'いやなじかんも、うった。'],
+  [20.4, '老後も、売った。', 'narrator', 'ろうごも、うった。'],
+  [24.2, '楽しいことだけの人生は、\nあっという間だった。', 'narrator', 'たのしいことだけの、じんせいは、あっというまだった。'],
+  [29.4, 'エヌ氏は、時間を買い戻しに行った。', 'narrator', 'エヌしは、じかんを、かいもどしにいった。'],
+  [33.6, '退屈な時間、一時間。一億円。', 'narrator', 'たいくつなじかん、いちじかん。いちおくえん。'],
+  [39.0, 'ええ、高いですよ。\nほかでは手に入りませんから。', 'owner', 'ええ、たかいですよ。ほかでは、てにはいりませんから。'],
+  [44.4, '私は毎日、買い取った退屈を、\nゆっくり味わっているんです。', 'owner', 'わたしは、まいにち、かいとった、たいくつを、ゆっくり、あじわっているんです。'],
+  [51.6, 'これが、いちばんの贅沢でしてね。', 'owner', 'これが、いちばんの、ぜいたくでしてね。'],
+]);
+// 売った時間のリスト [表示時刻, 項目, 量, 金額, 人生バーの削れる割合]
+const SOLD = [
+  [6.6, '通勤', '1時間', 1000, 0.05], [7.8, '待ち時間', '30分', 500, 0.03], [9.0, '会議', '2時間', 3000, 0.06],
+  [10.2, '行列', '1時間', 1000, 0.03],
+  [16.4, '風邪で寝込む日', '1日', 50000, 0.06], [17.6, '失恋の夜', '1晩', 100000, 0.07], [18.8, '退屈な日曜日', '1日', 80000, 0.08],
+  [20.6, '老後', '20年', 1000000000, 0.25],
+];
+const T = { sign: 0, list: 5.8, collapse: [22.8, 27.8], old: 28.6, tag: 32.4, shop: 38.2, end: 55.6 };
+
+// ================= 効果音・BGM =================
+const sfx = [
+  { t: 0, type: 'bell', freq: 1318, vol: 0.8 }, { t: 0.15, type: 'bell', freq: 1568, vol: 0.6 },
+  // ピチカートの軽快な曲。老後を売ったあたりで速くなり、途切れる
+  { t: 3.4, type: 'music', dur: 19.8, bpm: 112, chords: [[57, 60, 64], [52, 56, 59], [57, 60, 64], [53, 57, 62], [52, 56, 59]], pattern: 'bounce', timbre: 'pluck', vol: 1.1, stopAt: 19.6, fadeOut: 0.3 },
+  { t: T.collapse[0], type: 'whoosh', dur: 5.0, vol: 0.9 },
+  { t: T.tag + 0.9, type: 'hit', vol: 0.8 },
+  // 店の中: 時計の音と、ゆったりしたオルゴール
+  { t: T.shop, type: 'music', dur: 20.3, bpm: 60, beats: 4, chords: [[53, 57, 60], [48, 52, 55], [50, 53, 57], [55, 59, 62]], pattern: 'sparse', timbre: 'box', padVol: 0.6, vol: 0.9 },
+];
+for (const [t] of SOLD) sfx.push({ t, type: 'register', vol: 0.8 });
+for (let t = 28.6; t < 55.5; t += 1) sfx.push({ t, type: 'clock', vol: t < T.shop ? 0.9 : 0.6 });
+
+// ================= 見た目 =================
+const C = { bg: '#14110f', paper: '#efe6d2', ink: '#2a211b', gold: '#c9a86a', gray: '#6d655c', red: '#b8433a', life: '#d9a95b' };
+const yen = (n) => n >= 1e8 ? `${Math.floor(n / 1e8)}億${n % 1e8 >= 1e4 ? Math.floor((n % 1e8) / 1e4).toLocaleString('ja-JP') + '万' : ''}円` : `${n.toLocaleString('ja-JP')}円`;
+
+function money(t) {
+  let m = 0;
+  for (const [ts, , , v] of SOLD) m += v * ease.outCubic(seg(t, ts, ts + 0.6));
+  return m;
+}
+// 人生バー: 残っている割合
+function lifeLeft(t) {
+  let cut = 0;
+  for (const [ts, , , , c] of SOLD) cut += c * ease.inOut(seg(t, ts + 0.2, ts + 0.8));
+  return 1 - cut;
+}
+
+function sign(ctx, t) {
+  const a = Math.min(seg(t, 0, 0.5), 1 - seg(t, 4.8, 5.6));
+  if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha = a;
+  const sw = Math.sin(t * 1.6) * 0.02;
+  ctx.translate(W / 2, 640); ctx.rotate(sw);
+  ctx.strokeStyle = C.gold; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(-200, -300); ctx.lineTo(-160, -150); ctx.moveTo(200, -300); ctx.lineTo(160, -150); ctx.stroke();
+  ctx.fillStyle = '#2b2119'; rrect(ctx, -380, -150, 760, 380, 18); ctx.fill();
+  ctx.strokeStyle = C.gold; ctx.lineWidth = 3; rrect(ctx, -350, -120, 700, 320, 10); ctx.stroke();
+  ctx.fillStyle = C.paper; ctx.textAlign = 'center'; ctx.font = S.MIN(800, 110);
+  ctx.fillText('時間', 0, -10); ctx.font = S.MIN(800, 84); ctx.fillText('買い取ります', 0, 120);
+  ctx.restore();
+}
+
+// 買い取り伝票
+function receipt(ctx, t) {
+  const a = Math.min(seg(t, T.list - 0.3, T.list + 0.3), 1 - seg(t, T.collapse[0], T.collapse[0] + 0.6));
+  if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha = a;
+  const x = 110, y = 300, w = W - 220;
+  ctx.fillStyle = C.paper; rrect(ctx, x, y, w, 940, 8); ctx.fill();
+  ctx.fillStyle = C.ink; ctx.font = S.MIN(800, 52); ctx.textAlign = 'center'; ctx.fillText('買取明細', W / 2, y + 90);
+  ctx.fillRect(x + 50, y + 120, w - 100, 3);
+  let row = 0;
+  for (const [ts, name, amount, v] of SOLD) {
+    const p = seg(t, ts, ts + 0.35); if (p <= 0) continue;
+    const yy = y + 200 + row * 96; row++;
+    ctx.globalAlpha = a * p;
+    ctx.font = S.MIN(500, 44); ctx.textAlign = 'left'; ctx.fillStyle = C.ink;
+    ctx.fillText(name, x + 50 + (1 - ease.outCubic(p)) * 40, yy);
+    ctx.fillStyle = C.gray; ctx.fillText(amount, x + 440, yy);
+    ctx.textAlign = 'right'; ctx.fillStyle = v >= 1e8 ? C.red : C.ink; ctx.font = S.MIN(800, 44);
+    ctx.fillText(yen(v), x + w - 50, yy);
+    ctx.fillStyle = 'rgba(42,33,27,0.2)'; ctx.fillRect(x + 50, yy + 26, w - 100, 2);
+  }
+  ctx.restore();
+}
+
+function lifeBar(ctx, t) {
+  const a = Math.min(seg(t, T.list, T.list + 0.5), 1 - seg(t, T.old + 0.6, T.old + 1.2));
+  if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha = a;
+  const x = 110, y = 1420, w = W - 220, h = 44;
+  ctx.fillStyle = '#bdb2a0'; ctx.font = S.MIN(500, 34); ctx.textAlign = 'left'; ctx.fillText('エヌ氏の人生', x, y + 86 + 50);
+  // 「今」の位置は、人生が崩れる場面で一気に最後まで進む
+  const left = lifeLeft(t), total = w * left;
+  const now = lerp(0.3, 1, ease.inCubic(seg(t, T.collapse[0], T.collapse[1])));
+  ctx.fillStyle = '#2d2722'; rrect(ctx, x, y, w, h, h / 2); ctx.fill();
+  ctx.fillStyle = C.life; rrect(ctx, x, y, total, h, h / 2); ctx.fill();
+  ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.fillRect(x, y, total * now, h);
+  const nx = x + total * now;
+  ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.moveTo(nx, y - 6); ctx.lineTo(nx - 14, y - 30); ctx.lineTo(nx + 14, y - 30); ctx.fill();
+  ctx.font = S.MIN(500, 30); ctx.textAlign = 'center'; ctx.fillText('今', nx, y - 40);
+  ctx.fillStyle = '#9d948a'; ctx.textAlign = 'left'; ctx.fillText('0歳', x, y + 86); ctx.textAlign = 'right'; ctx.fillText(`${Math.round(80 * left)}歳`, x + total, y + 86);
+  // 所持金
+  ctx.textAlign = 'right'; ctx.fillStyle = C.gold; ctx.font = S.MIN(800, 56);
+  ctx.fillText(yen(Math.round(money(t) / 100) * 100), x + w, y + 190);
+  ctx.fillStyle = '#9d948a'; ctx.font = S.MIN(500, 32); ctx.fillText('所持金', x + w, y + 120);
+  ctx.restore();
+}
+
+// 人生があっという間に過ぎる: 年齢の数字が回る
+function collapse(ctx, t) {
+  const a = Math.min(seg(t, T.collapse[0] + 0.3, T.collapse[0] + 0.8), 1 - seg(t, T.old - 0.2, T.old + 0.3));
+  if (a <= 0) return;
+  const age = Math.round(lerp(30, 80, ease.inCubic(seg(t, T.collapse[0], T.collapse[1]))));
+  ctx.save(); ctx.globalAlpha = a; ctx.textAlign = 'center'; ctx.fillStyle = C.paper;
+  ctx.font = S.MIN(800, 260); ctx.fillText(String(age), W / 2 - 50, 900);
+  ctx.font = S.MIN(500, 90); ctx.fillText('歳', W / 2 + 190, 900);
+  ctx.restore();
+}
+
+// 買い戻しの値札
+function priceTag(ctx, t) {
+  const a = Math.min(seg(t, T.tag, T.tag + 0.5), 1 - seg(t, T.shop - 0.4, T.shop));
+  if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha = a;
+  ctx.translate(W / 2, 780); ctx.rotate(-0.05 + Math.sin(t * 1.5) * 0.01);
+  ctx.fillStyle = C.paper; ctx.beginPath(); ctx.moveTo(-340, -170); ctx.lineTo(260, -170); ctx.lineTo(360, 0); ctx.lineTo(260, 170); ctx.lineTo(-340, 170); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = C.bg; ctx.beginPath(); ctx.arc(250, 0, 22, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = C.gray; ctx.font = S.MIN(500, 36); ctx.textAlign = 'left'; ctx.fillText('買い戻し価格', -290, -90);
+  ctx.fillStyle = C.ink; ctx.font = S.MIN(800, 58); ctx.fillText('退屈な時間 1時間', -290, -10);
+  const p = ease.outBack(seg(t, T.tag + 0.9, T.tag + 1.3));
+  ctx.save(); ctx.translate(-290, 110); ctx.scale(p, p); ctx.fillStyle = C.red; ctx.font = S.MIN(800, 96); ctx.fillText('1億円', 0, 0); ctx.restore();
+  ctx.restore();
+}
+
+// 老いたエヌ氏（背中を丸めた杖の影）
+function oldMan(ctx, t) {
+  const a = Math.min(seg(t, T.old, T.old + 0.6), 1 - seg(t, T.shop - 0.4, T.shop));
+  if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha = a; ctx.fillStyle = '#0a0806'; ctx.strokeStyle = '#0a0806'; ctx.lineCap = 'round';
+  const x = 540 + Math.sin(t * 2) * 4, y = 1560;
+  ctx.translate(x, y); ctx.rotate(0.25);
+  rrect(ctx, -40, -330, 36, 330, 16); ctx.fill(); rrect(ctx, 6, -330, 36, 330, 16); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(-60, -640); ctx.lineTo(60, -620); ctx.lineTo(70, -310); ctx.lineTo(-70, -310); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(30, -700, 58, 68, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.lineWidth = 32; ctx.beginPath(); ctx.moveTo(40, -600); ctx.lineTo(140, -380); ctx.stroke();
+  ctx.lineWidth = 12; ctx.beginPath(); ctx.moveTo(140, -380); ctx.lineTo(120, 0); ctx.stroke();
+  ctx.restore();
+  // 床
+  ctx.fillStyle = 'rgba(201,168,106,0.15)'; ctx.fillRect(0, 1560, W, 4);
+}
+
+// 店の奥: 窓辺でお茶を飲む店主と、積み上がった帳簿
+function shop(ctx, t) {
+  const a = seg(t, T.shop, T.shop + 0.8);
+  if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha = a; ctx.translate(0, -180);
+  // 窓（やわらかい昼の光）
+  const g = ctx.createLinearGradient(0, 300, 0, 1000);
+  g.addColorStop(0, '#f5dfb0'); g.addColorStop(1, '#d9b98a');
+  ctx.fillStyle = g; ctx.fillRect(300, 300, 620, 700);
+  ctx.fillStyle = '#0a0806'; ctx.fillRect(600, 300, 16, 700); ctx.fillRect(300, 640, 620, 16);
+  ctx.strokeStyle = '#0a0806'; ctx.lineWidth = 24; ctx.strokeRect(300, 300, 620, 700);
+  // 光の筋
+  ctx.fillStyle = 'rgba(245,223,176,0.08)'; ctx.beginPath(); ctx.moveTo(300, 1000); ctx.lineTo(920, 1000); ctx.lineTo(1080, 1700); ctx.lineTo(80, 1700); ctx.fill();
+  // 柱時計
+  ctx.fillStyle = '#0a0806'; rrect(ctx, 80, 380, 140, 520, 20); ctx.fill();
+  ctx.fillStyle = C.paper; ctx.beginPath(); ctx.arc(150, 470, 50, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = '#0a0806'; ctx.lineWidth = 5; const ang = t * Math.PI * 2 / 60;
+  ctx.beginPath(); ctx.moveTo(150, 470); ctx.lineTo(150 + Math.sin(ang) * 40, 470 - Math.cos(ang) * 40); ctx.stroke();
+  const pend = Math.sin(t * Math.PI) * 0.3;
+  ctx.save(); ctx.translate(150, 560); ctx.rotate(pend); ctx.strokeStyle = C.gold; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, 240); ctx.stroke();
+  ctx.fillStyle = C.gold; ctx.beginPath(); ctx.arc(0, 250, 22, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+  // 店主（椅子に座ってお茶を飲む）
+  ctx.fillStyle = '#0a0806'; ctx.strokeStyle = '#0a0806'; ctx.lineCap = 'round';
+  ctx.fillRect(600, 1260, 260, 30); ctx.fillRect(820, 1000, 30, 560); ctx.fillRect(610, 1290, 20, 270);
+  ctx.beginPath(); ctx.moveTo(640, 1270); ctx.lineTo(820, 1270); ctx.lineTo(800, 960); ctx.lineTo(680, 960); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(730, 890, 62, 72, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.lineWidth = 36; ctx.beginPath(); ctx.moveTo(640, 1280); ctx.lineTo(560, 1290); ctx.lineTo(560, 1560); ctx.stroke();
+  const sip = Math.max(0, Math.sin((t - T.shop) * 0.9)) ;
+  ctx.lineWidth = 30; ctx.beginPath(); ctx.moveTo(700, 1000); ctx.lineTo(640, 1080 - sip * 40); ctx.lineTo(660 + sip * 10, 960 - sip * 30); ctx.stroke();
+  ctx.fillRect(640 + sip * 10, 930 - sip * 30, 44, 40);
+  // 湯気
+  ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = 5;
+  for (let i = 0; i < 2; i++) { ctx.beginPath(); for (let k = 0; k < 20; k++) { const yy = 910 - sip * 30 - k * 8, xx = 662 + sip * 10 + i * 16 + Math.sin(k * 0.6 + t * 3 + i) * 8; k ? ctx.lineTo(xx, yy) : ctx.moveTo(xx, yy); } ctx.stroke(); }
+  // 帳簿の山
+  const r = rng(11);
+  for (let i = 0; i < 14; i++) { ctx.fillStyle = i % 2 ? '#3a2d22' : '#4a3a2c'; ctx.fillRect(170 + r() * 20, 1540 - i * 34, 280, 30); ctx.fillStyle = C.gold; ctx.fillRect(175 + r() * 20, 1548 - i * 34, 60, 6); }
+  ctx.fillStyle = C.paper; ctx.font = S.MIN(500, 26); ctx.textAlign = 'center'; ctx.save(); ctx.translate(310, 1060); ctx.fillText('買取台帳', 0, 0); ctx.restore();
+  ctx.fillStyle = 'rgba(201,168,106,0.2)'; ctx.fillRect(0, 1560, W, 4);
+  ctx.restore();
+}
+
+function draw(ctx, t) {
+  ctx.fillStyle = C.bg; ctx.fillRect(0, 0, W, H);
+  sign(ctx, t);
+  receipt(ctx, t);
+  lifeBar(ctx, t);
+  collapse(ctx, t);
+  oldMan(ctx, t);
+  priceTag(ctx, t);
+  shop(ctx, t);
+  // 暖色のビネット
+  const v = ctx.createRadialGradient(W / 2, H / 2, H * 0.25, W / 2, H / 2, H * 0.7);
+  v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,0.55)');
+  ctx.fillStyle = v; ctx.fillRect(0, 0, W, H);
+  S.caption(ctx, NARR, t, { y: t >= T.shop ? 1560 : t < T.list ? 1250 : t < T.old ? 1320 : 1560, size: 54, font: S.MIN(800, 54), otherColor: '#f3d9a4' });
+  S.logo(ctx, t, NO);
+  S.endCard(ctx, t, T.end, NO, TITLE);
+}
+
+MG.create({ duration: DURATION, draw, sfx, narration: NARR, fonts: S.fonts(S.textOf(NARR, SOLD.map((s) => s[1] + s[2] + yen(s[3])).join('') + '時間買い取ります買取明細エヌ氏の人生今歳所持金円億,買い戻し価格退屈な時間1時間1億円買取台帳')) });
+</script>
+</body>
+</html>

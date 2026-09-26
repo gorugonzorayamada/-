@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>第1話「返信」</title>
+<link rel="stylesheet" href="../../node_modules/@fontsource/shippori-mincho/500.css">
+<link rel="stylesheet" href="../../node_modules/@fontsource/shippori-mincho/800.css">
+<link rel="stylesheet" href="../../node_modules/@fontsource/noto-sans-jp/400.css">
+<link rel="stylesheet" href="../../node_modules/@fontsource/noto-sans-jp/700.css">
+<link rel="stylesheet" href="../../lib/base.css">
+<script src="../../lib/mg.js"></script>
+<script src="../../lib/series.js"></script>
+</head>
+<body>
+<script>
+const { W, H, seg, ease, lerp, clamp, rrect, wrap, noise1, kf } = MG;
+const NO = 1, TITLE = '返信', DURATION = 56;
+
+// ================= 脚本 =================
+// ナレーション: [時刻, 文, 話者, 読み（必要なときだけ）]
+const NARR = S.lines([
+  [0.3, '知らない番号から、\n毎朝「おはよう」が届く。'],
+  [4.8, '男は、一度も返事をしなかった。', 'narrator', '男は、いちども返事をしなかった。'],
+  [9.2, '一年。二年。三年。', 'narrator', 'いちねん。にねん。さんねん。'],
+  [14.0, 'ある朝、届かなかった。'],
+  [18.6, '次の日も。その次の日も。'],
+  [22.6, '気づけば、待っていた。'],
+  // 宇宙人の返信（声を変える）。字幕は吹き出しが兼ねるので出さない
+  [31.0, 'こちらは、地球外通信実験です。', 'alien', 'こちらは、ちきゅうがいつうしんじっけんです。'],
+  [34.6, '応答までの所要時間、千二日。', 'alien', 'おうとうまでの、しょようじかん、せんふつか。'],
+  [38.6, '結論。この星に、知的生命体がいる可能性は低い。', 'alien', 'けつろん。このほしに、ちてきせいめいたいが、いるかのうせいは、ひくい。'],
+  [45.4, '調査を、終了します。', 'alien'],
+]);
+NARR.forEach((l) => { if (l.who === 'alien') l.noCaption = true; });
+
+const T = {
+  day2: 3.2, day3: 6.2, montage: [8.6, 13.4], stop: 13.4,
+  miss: [15.0, 18.6, 20.4],               // 1001〜1003日目（届かない）
+  type1: [23.4, 24.6], del: [24.9, 25.5], type2: [25.9, 27.0], send: 27.4, read: 28.3,
+  typing: [29.0, 30.8], reply: [31.0, 34.6, 38.6, 45.4],
+  panic: [47.8, 48.7], panicSend: 48.9, zoom: 49.6, end: 52.6,
+};
+const REPLY = ['こちらは地球外通信実験です。', '応答までの所要時間：1002日', '結論：この星に知的生命体がいる可能性は低い。', '調査を終了します。'];
+
+// ================= 効果音・BGM =================
+const sfx = [
+  // 静かなピアノ（1001日目で止まる）
+  { t: 0, type: 'music', dur: 15.2, bpm: 76, chords: [[57, 60, 64], [53, 57, 60], [48, 52, 55], [55, 59, 62]], pattern: 'sparse', timbre: 'piano', vol: 1.0, padVol: 0.6, stopAt: 15.2, fadeOut: 0.6 },
+  // 待つ時間の時計
+  ...Array.from({ length: 12 }, (_, i) => ({ t: 15.2 + i, type: 'clock', vol: 0.7 })),
+  { t: T.reply[0] - 0.4, type: 'drone', dur: 16, vol: 0.9 },
+  { t: T.end, type: 'bell', freq: 440, vol: 0.7 },
+];
+for (const t of [0.4, T.day2 + 0.2, T.day3 + 0.2]) sfx.push({ t, type: 'ping', vol: 0.7 });
+for (let i = 0; i < 14; i++) sfx.push({ t: T.montage[0] + 0.4 + i * 0.32, type: 'ping', vol: 0.25, pitch: 1 + i * 0.02 });
+for (const [a, b] of [T.type1, T.type2]) for (let i = 0; i < 4; i++) sfx.push({ t: a + (b - a) * i / 4, type: 'tick', vol: 0.6 });
+for (let i = 0; i < 4; i++) sfx.push({ t: T.del[0] + i * 0.15, type: 'tick', vol: 0.4 });
+sfx.push({ t: T.send, type: 'send' });
+for (const t of T.reply) sfx.push({ t, type: 'ping', vol: 0.8, pitch: 0.8 });
+for (let i = 0; i < 7; i++) sfx.push({ t: T.panic[0] + i * 0.12, type: 'tick', vol: 0.7 });
+sfx.push({ t: T.panicSend, type: 'send' });
+
+// ================= チャット画面 =================
+const F = (w, s) => `${w} ${s}px "Noto Sans JP"`;
+const C = { bg: '#0e0f13', head: '#16181e', them: '#262932', me: '#3a6df0', text: '#f2f3f5', sub: '#8b8f9a' };
+const TOP = 260, BOTTOM = 1640, PADX = 40, FS = 54, LH = 74;
+
+// 画面に並ぶアイテム（日付ラベル・吹き出し）。appear 以降に出現
+function items() {
+  const a = [];
+  const day = (d, t) => a.push({ kind: 'date', text: `${d}日目`, t });
+  const msg = (from, text, t) => a.push({ kind: from, text, t });
+  day(1, 0.2); msg('them', 'おはよう', 0.4);
+  day(2, T.day2); msg('them', 'おはよう', T.day2 + 0.2);
+  day(3, T.day3); msg('them', 'おはよう', T.day3 + 0.2);
+  // モンタージュ中は仮想的に大量に並ぶ（描画時に処理）。最後に1000日目
+  day(1000, T.stop - 0.3); msg('them', 'おはよう', T.stop - 0.2);
+  day(1001, T.miss[0]); day(1002, T.miss[1]); day(1003, T.miss[2]);
+  msg('me', 'おはよう', T.send);
+  REPLY.forEach((s, i) => msg('them', s, T.reply[i]));
+  msg('me', 'ちょっと待って', T.panicSend);
+  return a;
+}
+const ITEMS = items();
+let measured = false;
+function measure(ctx) {
+  if (measured) return; measured = true;
+  ctx.font = F(400, FS);
+  for (const it of ITEMS) if (it.kind !== 'date') {
+    it.lines = wrap(ctx, it.text, 800);
+    it.w = Math.max(...it.lines.map((l) => ctx.measureText(l).width)) + 64;
+    it.h = it.lines.length * LH + 40;
+  } else it.h = 70;
+}
+
+function avatar(ctx, x, y, r) {
+  ctx.fillStyle = '#4a4e5a'; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#fff'; ctx.font = F(700, r * 0.9); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText('?', x, y + 2); ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+}
+
+function bubble(ctx, it, y, t, s) {
+  const mine = it.kind === 'me', x = mine ? W - PADX - it.w : PADX + 110;
+  ctx.save();
+  ctx.translate(mine ? x + it.w : x, y + it.h); ctx.scale(s, s); ctx.translate(mine ? -it.w : 0, -it.h);
+  ctx.fillStyle = mine ? C.me : C.them; rrect(ctx, 0, 0, it.w, it.h, 40); ctx.fill();
+  ctx.fillStyle = C.text; ctx.font = F(400, FS);
+  it.lines.forEach((l, k) => ctx.fillText(l, 32, 20 + LH * k + 52));
+  ctx.restore();
+  if (!mine) avatar(ctx, PADX + 42, y + it.h - 42, 42);
+  // 既読表示（自分の最初の「おはよう」だけ既読がつく。最後の「ちょっと待って」にはつかない）
+  if (mine && it.t === T.send && t > T.read) {
+    ctx.globalAlpha = seg(t, T.read, T.read + 0.3); ctx.fillStyle = C.sub; ctx.font = F(400, 32); ctx.textAlign = 'right';
+    ctx.fillText('既読', x - 14, y + it.h - 10); ctx.textAlign = 'left'; ctx.globalAlpha = 1;
+  }
+}
+
+function typingDots(ctx, y, t) {
+  const x = PADX + 110;
+  ctx.fillStyle = C.them; rrect(ctx, x, y, 170, 92, 46); ctx.fill();
+  for (let i = 0; i < 3; i++) {
+    const b = Math.max(0, Math.sin(t * 9 - i * 0.9));
+    ctx.fillStyle = `rgba(200,204,214,${0.4 + 0.6 * b})`; ctx.beginPath(); ctx.arc(x + 48 + i * 37, y + 46 - b * 10, 11, 0, Math.PI * 2); ctx.fill();
+  }
+  avatar(ctx, PADX + 42, y + 50, 42);
+}
+
+function drawChat(ctx, t) {
+  measure(ctx);
+  const GAP = 30;
+  ctx.save(); ctx.beginPath(); ctx.rect(0, TOP, W, BOTTOM - TOP); ctx.clip();
+
+  // モンタージュ: 日付と「おはよう」が高速でスクロールしていく
+  if (t >= T.montage[0] && t < T.stop) {
+    const p = ease.inCubic(seg(t, T.montage[0], T.stop - 0.4));
+    const day = Math.floor(lerp(4, 999, p));
+    const unit = 70 + 132 + GAP * 2, scroll = p * 40 * unit;
+    for (let k = -2; k < 9; k++) {
+      const idx = Math.floor(scroll / unit) + k, y = TOP + 40 + idx * unit - scroll;
+      const d = Math.min(999, 4 + Math.floor(idx * 995 / 40));
+      ctx.fillStyle = C.sub; ctx.font = F(400, 32); ctx.textAlign = 'center'; ctx.fillText(`${d}日目`, W / 2, y + 44); ctx.textAlign = 'left';
+      bubble(ctx, { kind: 'them', lines: ['おはよう'], w: ITEMS[1].w, h: ITEMS[1].h }, y + 70 + GAP, t, 1);
+    }
+    ctx.restore();
+    // 日数カウンター
+    ctx.save(); ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(22,24,30,0.95)'; rrect(ctx, W / 2 - 300, 620, 600, 230, 30); ctx.fill(); ctx.strokeStyle = '#3a3e4a'; ctx.lineWidth = 3; ctx.stroke();
+    ctx.font = S.MIN(800, 150); const nw = ctx.measureText(String(day)).width; ctx.font = S.MIN(500, 60); const uw = ctx.measureText('日目').width;
+    const x0 = W / 2 - (nw + 16 + uw) / 2; ctx.textAlign = 'left'; ctx.fillStyle = C.text;
+    ctx.font = S.MIN(800, 150); ctx.fillText(String(day), x0, 790); ctx.font = S.MIN(500, 60); ctx.fillText('日目', x0 + nw + 16, 790); ctx.restore();
+    return;
+  }
+
+  // 通常時: アイテムを積み上げて、下端に合わせてスクロール
+  const visible = ITEMS.filter((it) => t >= it.t && !(t >= T.montage[0] && it.t < T.montage[0]));
+  // 相手の「入力中…」
+  const dots = t >= T.typing[0] && t < T.typing[1] ? { kind: 'dots', h: 92, t: T.typing[0] } : null;
+  const list = visible.slice(); if (dots) list.push(dots);
+  const hs = list.map((it) => (it.h + GAP) * ease.outCubic(seg(t, it.t, it.t + 0.3)));
+  const total = hs.reduce((a, b) => a + b, 0);
+  const scroll = Math.max(0, total - (BOTTOM - TOP - 140));
+  let y = TOP + 40 - scroll;
+  list.forEach((it, i) => {
+    const p = seg(t, it.t, it.t + 0.3), s = lerp(0.7, 1, ease.outBack(p));
+    ctx.globalAlpha = clamp(p * 2);
+    if (it.kind === 'date') {
+      ctx.fillStyle = C.sub; ctx.font = F(400, 32); ctx.textAlign = 'center'; ctx.fillText(it.text, W / 2, y + 44); ctx.textAlign = 'left';
+    } else if (it.kind === 'dots') typingDots(ctx, y, t);
+    else bubble(ctx, it, y, t, s);
+    ctx.globalAlpha = 1;
+    y += hs[i];
+  });
+  ctx.restore();
+}
+
+function drawHeader(ctx, t) {
+  ctx.fillStyle = C.head; ctx.fillRect(0, 0, W, TOP);
+  ctx.fillStyle = C.text; ctx.font = F(700, 34); ctx.fillText('7:00', 70, 70);
+  ctx.textAlign = 'right'; ctx.fillText('▮▮▮  87%', W - 60, 70); ctx.textAlign = 'left';
+  ctx.strokeStyle = C.text; ctx.lineWidth = 6; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(84, 150); ctx.lineTo(60, 174); ctx.lineTo(84, 198); ctx.stroke();
+  avatar(ctx, 170, 174, 44);
+  ctx.font = F(700, 44); ctx.fillStyle = C.text; ctx.fillText('000-0000-0001', 236, 166);
+  ctx.font = F(400, 28); ctx.fillStyle = C.sub; ctx.fillText('連絡先に登録されていません', 236, 208);
+}
+
+function drawInput(ctx, t) {
+  ctx.fillStyle = C.head; ctx.fillRect(0, BOTTOM, W, H - BOTTOM);
+  ctx.fillStyle = '#23262e'; rrect(ctx, 48, BOTTOM + 40, W - 200, 96, 48); ctx.fill();
+  let txt = '', caret = false;
+  const typed = (s, a, b) => { const n = [...s]; return n.slice(0, Math.ceil(n.length * seg(t, a, b))).join(''); };
+  if (t >= T.type1[0] && t < T.del[1]) { txt = t < T.del[0] ? typed('おはよう', ...T.type1) : [...'おはよう'].slice(0, Math.max(0, 4 - Math.floor(seg(t, ...T.del) * 5))).join(''); caret = true; }
+  if (t >= T.del[1] && t < T.send) { txt = typed('おはよう', ...T.type2); caret = true; }
+  if (t >= T.panic[0] && t < T.panicSend) { txt = typed('ちょっと待って', ...T.panic); caret = true; }
+  if (t >= T.del[1] - 0.2 && t < T.type2[0]) caret = true;
+  ctx.font = F(400, 42); ctx.fillStyle = txt ? C.text : C.sub;
+  ctx.fillText(txt || 'メッセージを入力', 90, BOTTOM + 103);
+  if (caret && Math.floor(t * 2.5) % 2 === 0) { const w = txt ? ctx.measureText(txt).width : 0; ctx.fillStyle = C.me; ctx.fillRect(92 + w, BOTTOM + 62, 4, 52); }
+  ctx.fillStyle = C.me; ctx.beginPath(); ctx.arc(W - 100, BOTTOM + 88, 48, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.moveTo(W - 120, BOTTOM + 66); ctx.lineTo(W - 74, BOTTOM + 88); ctx.lineTo(W - 120, BOTTOM + 110); ctx.lineTo(W - 112, BOTTOM + 88); ctx.fill();
+}
+
+function draw(ctx, t) {
+  ctx.fillStyle = C.bg; ctx.fillRect(0, 0, W, H);
+  // ラスト: 既読のつかない吹き出しにゆっくり寄る
+  const z = ease.inOut(seg(t, T.zoom, T.end)) * 0.2;
+  ctx.save();
+  ctx.translate(W - 40, 1500); ctx.scale(1 + z, 1 + z); ctx.translate(-(W - 40), -1500);
+  drawChat(ctx, t);
+  drawHeader(ctx, t);
+  drawInput(ctx, t);
+  ctx.restore();
+  // 宇宙人の返信中は画面が少し暗く、冷たくなる
+  const cold = seg(t, T.reply[0] - 0.3, T.reply[0] + 1) * 0.25;
+  if (cold > 0) { ctx.fillStyle = `rgba(0,20,40,${cold})`; ctx.fillRect(0, 0, W, H); }
+  // ナレーション字幕（画面中央の帯）
+  S.caption(ctx, NARR, t, { y: 1080, style: 'box', size: 56, font: S.MIN(800, 56), boxColor: 'rgba(0,0,0,0.78)' });
+  S.logo(ctx, t, NO, true, 1300);
+  S.endCard(ctx, t, T.end, NO, TITLE);
+}
+
+MG.create({
+  duration: DURATION, draw, sfx, narration: NARR,
+  fonts: S.fonts(S.textOf(NARR, ITEMS.map((i) => i.text).join('') + '日目既読000-0000-0001連絡先に登録されていませんメッセージを入力7:0087%?▮'), { sans: true }),
+});
+</script>
+</body>
+</html>
